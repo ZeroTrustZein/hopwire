@@ -1,0 +1,75 @@
+# AegisGraph engine configuration.
+# Every field is optional; omitted fields take the defaults shown here.
+# Durations are milliseconds; amounts are minor units (pence/cents).
+
+# Sliding window: edges older than (latest txn timestamp - window_ms) are evicted. 72h.
+window_ms = 259200000
+# In+out degree within the window at which a node is a HUB. Hubs can start or end
+# a cycle path but are never traversed through (keeps searches bounded).
+hub_degree = 500
+
+# Combined score = 1 - prod(1 - weight_i * score_i) over all findings (noisy-OR).
+[bands]
+# score >= review -> "review"
+review = 0.5
+# score >= block -> "block"
+block = 0.85
+
+# Money returning to its origin: new payment u->v closes a time-ordered path v->...->u.
+[cycle]
+enabled = true
+weight = 0.9
+# Max cycle length in hops, including the closing payment (2..=4).
+max_hops = 4
+# Max edge visits per search; caps worst-case latency. Search gives up (no finding) beyond it.
+budget = 2000
+# Oldest leg must be at most this long before the closing payment. 72h.
+max_span_ms = 259200000
+
+# Mule collection account: creditor paid by many distinct senders.
+[fan_in]
+enabled = true
+weight = 0.6
+# 24h.
+window_ms = 86400000
+min_senders = 8
+# Creditor accounts opened within this period before the txn score higher. 30d.
+young_account_ms = 2592000000
+
+# APP-fraud mule cash-out: debtor forwards what it just received.
+# inflow = payments into the debtor in [t - within_ms, t];
+# outflow = this payment + debtor's payments since the earliest of those inflows;
+# fires when inflow >= min_inflow_minor and outflow >= min_ratio * inflow.
+[pass_through]
+enabled = true
+weight = 0.7
+# 60m.
+within_ms = 3600000
+min_ratio = 0.8
+# 100.00 in major units.
+min_inflow_minor = 10000
+
+# Scatter: debtor pays many distinct payees.
+[fan_out]
+enabled = true
+weight = 0.5
+# 24h.
+window_ms = 86400000
+min_payees = 10
+
+# Debtor outgoing count or value per window above limits.
+[velocity]
+enabled = true
+weight = 0.4
+# 1h.
+window_ms = 3600000
+# Fires when count > max_count ...
+max_count = 20
+# ... or sum > max_sum_minor (50,000.00).
+max_sum_minor = 5000000
+
+# Device / IP / customer identity linked to many accounts within window_ms.
+[shared_id]
+enabled = true
+weight = 0.5
+min_accounts = 4

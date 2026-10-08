@@ -3,7 +3,10 @@
 //! Zero IO, zero network dependencies.
 
 pub mod config;
+mod detectors;
 mod engine;
+mod graph;
+mod score;
 pub mod types;
 
 pub use config::Config;
