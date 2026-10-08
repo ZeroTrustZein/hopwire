@@ -7,3 +7,11 @@ publish.workspace = true
 
 [dependencies]
 aegis-core = { path = "../aegis-core" }
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+clap = { version = "4", features = ["derive", "env"] }
+csv = "1"
+hdrhistogram = { version = "7", default-features = false }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+sysinfo = { version = "0.37", default-features = false, features = ["system"] }
