@@ -1,0 +1,12 @@
+.git
+.github
+.tools
+target
+**/target
+**/node_modules
+console/dist
+bench/data
+**/.env
+**/.env.*
+!**/.env.example
+deploy/helm

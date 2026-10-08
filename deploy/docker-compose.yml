@@ -1,0 +1,59 @@
+# AegisGraph pilot stack: postgres + engine + console.
+#   cd deploy && cp .env.example .env   # then edit secrets
+#   docker compose up -d --build
+# Console: http://localhost:3000   Engine (replay target): http://127.0.0.1:8080
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aegis}
+      POSTGRES_USER: ${POSTGRES_USER:-aegis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  engine:
+    build:
+      context: ..
+      dockerfile: deploy/engine.Dockerfile
+    image: aegisgraph/engine:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aegis}
+      AEGIS_API_KEY: ${AEGIS_API_KEY:?set AEGIS_API_KEY in deploy/.env}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      # Loopback only: used by `aegis-bench replay` and curl from the host.
+      - "127.0.0.1:8080:8080"
+    # No healthcheck here: the distroless image has no shell/curl.
+    # The console container's healthcheck probes /healthz through nginx instead.
+    volumes:
+      # Engine tuning. Defaults to the repo's config.example.toml; to tune:
+      #   cp ../config.example.toml config.toml  and set AEGIS_CONFIG_FILE=./config.toml in .env
+      - ${AEGIS_CONFIG_FILE:-../config.example.toml}:/etc/aegis/config.toml:ro
+
+  console:
+    build:
+      context: ..
+      dockerfile: deploy/console.Dockerfile
+    image: aegisgraph/console:local
+    restart: unless-stopped
+    depends_on:
+      - engine
+    environment:
+      AEGIS_ENGINE_URL: http://engine:8080
+    ports:
+      - "3000:80"
+
+volumes:
+  pgdata:
