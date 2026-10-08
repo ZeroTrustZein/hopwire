@@ -113,6 +113,11 @@ Replay into a **fresh** stack dedicated to the pilot. The engine's sliding windo
 has seen, so the file must be sorted by `ts_ms` ascending, and mixing a historical replay with live traffic on one
 instance will evict edges early.
 
+Include at least `history_ms` (35 days) of history *before* the period you want to evaluate. The first weeks teach the
+engine your customers' regular counterparties; alerts raised in that warm-up are mostly first-time payroll and bills
+and should be excluded from the false-positive count. On our synthetic benchmark, precision is 9 % with no history
+and 65–88 % after a 35-day warm-up, at the same recall (see `bench/README.md`).
+
 The engine image ships the replay tool, so nothing else needs installing:
 ```bash
 cd deploy
@@ -149,19 +154,28 @@ can never push a score above its own weight.
 0.85) is the "stop the payment" recommendation. Raise `review` to cut alert volume; lower it to catch more.
 
 **Global**
-- `window_ms` (default 72 h): how much recent history the engine remembers. Patterns spread over longer than this are not seen.
+- `window_ms` (default 72 h): how long payment edges stay in the graph. Ring patterns spread over longer than this are not seen.
+- `history_ms` (default 35 days): how much history is replayed on restart. Edges older than `window_ms` are dropped
+  again, but the engine keeps remembering *who has paid whom*. That memory is what stops a monthly payroll or
+  a regular rent payment from looking like a sudden scatter to new payees. Set it to cover your longest regular pay cycle.
 - `hub_degree` (default 500): an account or device with this many counterparties in the window is treated as a hub
   (payroll provider, merchant, shared office IP). Hubs still score their own payments but are not walked through when
   looking for rings, which keeps latency flat and avoids "everyone is connected via Amazon" false positives.
 
+**Counterparty memory.** Every account keeps a bounded record of payees and payers it has dealt with before (up to
+16 384 each; the least-recently-paid half is dropped when full, so regular counterparties survive). Fan-out,
+velocity, fan-in and pass-through only count *new* counterparties, and a 2-hop "A pays B, B pays A back" between
+established parties is scored at half strength. That is why the first weeks after go-live alert more than steady
+state: backfill at least one pay cycle of history before judging alert volume (section 4).
+
 | Detector | Plain English | Knobs (defaults) |
 |---|---|---|
-| `cycle` | Money comes back to where it started via 2–4 accounts (round-tripping, layering). | `max_hops` 4, `max_span_ms` 72 h (whole loop must close within), `budget` 2000 (search effort cap; leave alone), `weight` 0.9 |
-| `fan_in` | One account suddenly receives from many different senders: the classic APP mule collecting from victims. Scored higher if the account is new. | `min_senders` 8 within `window_ms` 24 h, `young_account_ms` 30 days, `weight` 0.6 |
-| `pass_through` | Money lands and is forwarded on almost immediately: the core mule behaviour. | `min_ratio` 0.8 (≥ 80 % of inflow sent out) `within_ms` 60 min, ignored below `min_inflow_minor` 10 000 (£100), `weight` 0.7 |
-| `fan_out` | One account pays many different payees: scattering stolen funds, or a compromised account being emptied. | `min_payees` 10 within `window_ms` 24 h, `weight` 0.5 |
-| `velocity` | Unusually many or large outgoing payments in a short period. | `max_count` 20 or `max_sum_minor` 5 000 000 (£50 000) within `window_ms` 1 h, `weight` 0.4 |
-| `shared_id` | One device, IP or person is behind several accounts: mule herders running accounts from one phone. | `min_accounts` 4, `weight` 0.5 |
+| `cycle` | Money comes back to where it started via 2–4 accounts (round-tripping, layering). Loops that return less than half the value are scored down. | `max_hops` 4, `max_span_ms` 72 h (whole loop must close within), `budget` 2000 (search effort cap; leave alone), `weight` 0.9 |
+| `fan_in` | One account suddenly receives from many *new* senders: the classic APP mule collecting from victims. Card-scheme inflows (merchants) are ignored; scored higher if the account is new. | `min_senders` 6 within `window_ms` 24 h, established accounts need `min_new_senders` 6, `young_account_ms` 30 days, `weight` 0.58 |
+| `pass_through` | Money from *new* payers lands and is forwarded on almost immediately: the core mule behaviour. Salary from a known employer spent on payday does not count. | `min_ratio` 0.8 (≥ 80 % of inflow sent out) `within_ms` 60 min, ignored below `min_inflow_minor` 10 000 (£100), `weight` 0.7 |
+| `fan_out` | One account pays many *new* payees: scattering stolen funds, or a compromised account being emptied. Boosted when payees are newly opened accounts. | `min_payees` 10 within `window_ms` 24 h, `young_payee_ms` 30 days, `weight` 0.6 |
+| `velocity` | Unusually many or large payments to new payees in a short period. | `max_count` 15 or `max_sum_minor` 50 000 000 (£500 000) within `window_ms` 1 h, `weight` 0.7 |
+| `shared_id` | One device, IP or person is behind several accounts: mule herders running accounts from one phone. | `min_accounts` 4, `weight` 0.85 |
 
 Every detector has `enabled = true|false`. Tuning loop for the pilot: replay → disposition a sample of alerts → look at
 which rules drive false positives → raise that rule's threshold or lower its weight → replay again. Change one thing at a time.
