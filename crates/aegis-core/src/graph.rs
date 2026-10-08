@@ -134,31 +134,41 @@ fn evict_front<E: Timed + Copy>(
 /// Outlives the 72-hour sliding window so repeat counterparties (payroll staff,
 /// regular bills, standing orders) are not flagged as new.
 ///
+/// Times are stored as whole seconds in `u32` (good until 2106) to halve the entry
+/// size: this map dominates engine memory at bank scale. Comparisons round the
+/// caller's millisecond cutoff the same way, so second resolution is exact enough.
+///
 /// When full, the least-recently-paid half is dropped in one O(n) pass (amortised
 /// O(1) per insert). Recurring payees keep refreshing `last` and survive; one-offs
 /// age out. FIFO eviction would do the opposite and churn a large payroll forever.
 #[derive(Debug, Default)]
 pub struct KnownPayees {
-    pub(crate) map: hashbrown::HashMap<u32, (i64, i64)>,
+    pub(crate) map: hashbrown::HashMap<u32, (u32, u32)>,
 }
 
 // Covers normal employers and recurring billers while bounding per-account memory.
 pub(crate) const KNOWN_PAYEES_CAP: usize = 16_384;
 
+#[inline]
+fn secs(ms: i64) -> u32 {
+    (ms.div_euclid(1000)).clamp(0, u32::MAX as i64) as u32
+}
+
 impl KnownPayees {
-    /// Record a payment to `peer` at `ts`; keeps the original first-seen time.
+    /// Record a payment to `peer` at `ts` (ms); keeps the original first-seen time.
     pub fn record(&mut self, peer: u32, ts: i64) {
+        let t = secs(ts);
         if let Some((_, last)) = self.map.get_mut(&peer) {
-            *last = (*last).max(ts);
+            *last = (*last).max(t);
             return;
         }
         if self.map.len() >= KNOWN_PAYEES_CAP {
-            let mut lasts: Vec<i64> = self.map.values().map(|v| v.1).collect();
+            let mut lasts: Vec<u32> = self.map.values().map(|v| v.1).collect();
             let mid = lasts.len() / 2;
             let cutoff = *lasts.select_nth_unstable(mid).1;
             self.map.retain(|_, v| v.1 > cutoff);
         }
-        self.map.insert(peer, (ts, ts));
+        self.map.insert(peer, (t, t));
     }
 
     /// Whether `peer` is in the retained known set (retention outlives graph window).
@@ -166,11 +176,12 @@ impl KnownPayees {
         self.map.contains_key(&peer)
     }
 
-    /// Whether `peer` was first observed during the current scoring window.
+    /// Whether `peer` was first observed at or after `cutoff` (ms), or never.
     pub fn is_new(&self, peer: u32, cutoff: i64) -> bool {
+        let c = secs(cutoff);
         self.map
             .get(&peer)
-            .is_none_or(|&(first_seen, _)| first_seen >= cutoff)
+            .is_none_or(|&(first_seen, _)| first_seen >= c)
     }
 }
 
@@ -497,10 +508,10 @@ mod tests {
         let mut ts = 0;
         for (i, p) in one_offs.clone().enumerate() {
             if i % 1000 == 0 {
-                ts += 1;
+                ts += 1000;
                 payroll.clone().for_each(|s| k.record(s, ts));
             }
-            ts += 1;
+            ts += 1000; // ms; map keeps second resolution
             k.record(p, ts);
         }
         assert!(k.map.len() <= KNOWN_PAYEES_CAP);
@@ -510,7 +521,10 @@ mod tests {
         );
         assert!(!k.has_seen(one_offs.start), "stalest one-off kept");
         assert!(k.has_seen(one_offs.end - 1), "newest one-off evicted");
-        assert!(!k.is_new(0, 2), "first-seen time must not move on repeat");
+        assert!(
+            !k.is_new(0, 2_000),
+            "first-seen time must not move on repeat"
+        );
     }
 
     #[test]
