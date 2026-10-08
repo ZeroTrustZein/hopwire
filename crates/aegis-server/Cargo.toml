@@ -1,0 +1,9 @@
+[package]
+name = "aegis-server"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+publish.workspace = true
+
+[dependencies]
+aegis-core = { path = "../aegis-core" }
