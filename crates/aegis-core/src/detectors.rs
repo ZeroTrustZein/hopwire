@@ -202,7 +202,9 @@ fn cycle_finding_from(g: &Graph, edges: &[(u32, PaymentEdge)], txn: &Txn, cfg: &
     let (lo, hi) = amounts.fold((i64::MAX, i64::MIN), |(lo, hi), a| (lo.min(a), hi.max(a)));
     let retention = lo as f64 / hi.max(1) as f64;
     let speed = 1.0 - (span as f64 / cfg.cycle.max_span_ms.max(1) as f64).clamp(0.0, 1.0);
-    let mut score = 0.5 + 0.3 * retention + 0.2 * speed;
+    // Layering returns most of the value; a loop that keeps a sliver (shop -> refund,
+    // friend group) is topology, not laundering. Below 50% retention, scale down.
+    let mut score = (0.5 + 0.3 * retention + 0.2 * speed) * (retention / 0.5).min(1.0);
     // A->B->A is everyday reciprocity (loan repaid, bill split) unless it is a near-full
     // round trip of fresh counterparties. Layering needs intermediaries: 3+ hops score in full.
     if hops == 2 {

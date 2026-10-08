@@ -428,9 +428,11 @@ impl Graph {
     }
 
     /// BFS neighbourhood over in+out edges of both kinds. Hubs other than the start are
-    /// listed but not expanded. Order: BFS; per node out-payments, in-payments, out-links,
-    /// in-links, each oldest first.
+    /// listed but not expanded. Each node contributes at most its `SUBGRAPH_FANOUT`
+    /// newest edges per kind/direction, so one busy merchant cannot drown the picture.
+    /// Order: BFS; per node out-payments, in-payments, out-links, in-links, each newest first.
     pub fn subgraph(&self, id: &str, hops: u8, max_edges: usize) -> Subgraph {
+        const SUBGRAPH_FANOUT: usize = 12;
         let Some(start) = self.lookup(id) else {
             return Subgraph::default();
         };
@@ -448,21 +450,19 @@ impl Graph {
             }
             let n = self.node(cur);
             use EdgeKind::{Payment, Uses};
-            let all = (n
-                .out
-                .iter()
-                .map(|e| (cur, e.peer, Payment, e.tx, e.ts, e.amount)))
-            .chain(
-                n.inc
-                    .iter()
-                    .map(|e| (e.peer, cur, Payment, e.tx, e.ts, e.amount)),
-            )
-            .chain(
-                n.uses_out
-                    .iter()
-                    .map(|e| (cur, e.peer, Uses, e.tx, e.ts, 0)),
-            )
-            .chain(n.uses_in.iter().map(|e| (e.peer, cur, Uses, e.tx, e.ts, 0)));
+            let k = SUBGRAPH_FANOUT;
+            let all = (n.out.iter().rev().take(k))
+                .map(|e| (cur, e.peer, Payment, e.tx, e.ts, e.amount))
+                .chain(
+                    (n.inc.iter().rev().take(k))
+                        .map(|e| (e.peer, cur, Payment, e.tx, e.ts, e.amount)),
+                )
+                .chain(
+                    (n.uses_out.iter().rev().take(k)).map(|e| (cur, e.peer, Uses, e.tx, e.ts, 0)),
+                )
+                .chain(
+                    (n.uses_in.iter().rev().take(k)).map(|e| (e.peer, cur, Uses, e.tx, e.ts, 0)),
+                );
             for (from, to, kind, tx, ts, amount) in all {
                 if ts < cut || !seen_edges.insert((from, to, kind, tx)) {
                     continue;

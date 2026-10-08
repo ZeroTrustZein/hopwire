@@ -544,3 +544,15 @@ fn two_hop_reciprocity_damped_unless_fresh_round_trip() {
     let v = ring(&mut e, 2);
     assert!(v.score >= cfg.bands.review, "{v:#?}");
 }
+
+/// A 3-hop loop that returns only a sliver of the value is not layering.
+#[test]
+fn low_retention_cycle_stays_below_review() {
+    let cfg = only(Rule::Cycle);
+    let mut e = Engine::new(cfg.clone());
+    e.process(&tx("l1", 0, 1_000_000, "a", "b"));
+    e.process(&tx("l2", HOUR, 900_000, "b", "c"));
+    let v = e.process(&tx("l3", 2 * HOUR, 60_000, "c", "a"));
+    assert!(has(&v, Rule::Cycle), "still reported as context");
+    assert!(v.score < cfg.bands.review, "{v:#?}");
+}

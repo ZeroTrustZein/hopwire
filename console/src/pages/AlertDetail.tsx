@@ -11,7 +11,7 @@ const ANALYST_KEY = 'aegis.analyst'
 export default function AlertDetail() {
   const { id = '' } = useParams()
   const nav = useNavigate()
-  const [hops, setHops] = useState(2)
+  const [hops, setHops] = useState(1)
   const [sel, setSel] = useState<number | null>(0)
   const alert = useLoad(() => api.alert(id), [id])
   const graph = useLoad(() => api.subgraph(id, hops), [id, hops])

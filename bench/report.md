@@ -19,7 +19,7 @@ Latency = wall time of one `Engine::process()` call (ingest + all detectors).
 
 | Engine TPS | Wall TPS (incl. data gen/parse) | p50 µs | p90 µs | p99 µs | p99.9 µs | max µs | mean µs |
 |---|---|---|---|---|---|---|---|
-| 400453 | 309547 | 2.0 | 3.5 | 9.4 | 43.6 | 2842.6 | 2.5 |
+| 442103 | 338652 | 1.8 | 3.1 | 8.5 | 26.3 | 2672.6 | 2.3 |
 
 Final graph: 99305 nodes, 317606 edges, 67 hubs (window 72 h).
 
@@ -29,7 +29,7 @@ Flagged = decision `review` or `block`.
 
 | Laundering txns | Flagged | Review | Block | Alert rate | Precision (flagged laundering / flagged) | Txn recall |
 |---|---|---|---|---|---|---|
-| 2947 | 2286 | 1950 | 336 | 0.1% | 85.0% | 65.9% |
+| 2947 | 2196 | 1860 | 336 | 0.1% | 88.5% | 65.9% |
 
 ### Recall by typology
 
@@ -49,9 +49,9 @@ Attempt recall: an attempt counts as caught if any of its txns is flagged. Rules
 
 | Rule | Txns with finding | On laundering txns | On flagged txns |
 |---|---|---|---|
-| cycle | 757 | 35 | 154 |
+| cycle | 757 | 35 | 64 |
 | mule_fan_in | 573 | 573 | 436 |
-| pass_through | 383 | 231 | 316 |
+| pass_through | 383 | 231 | 315 |
 | fan_out | 1359 | 1214 | 1354 |
 | velocity | 578 | 576 | 578 |
 | shared_identifier | 801 | 203 | 159 |

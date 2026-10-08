@@ -69,7 +69,6 @@ export default function GraphView({ subgraph, currency, highlight, focus }: {
     const c = cytoscape({
       container: ref.current,
       style: style(),
-      wheelSensitivity: 0.3,
       minZoom: 0.15,
       maxZoom: 4,
       elements: [

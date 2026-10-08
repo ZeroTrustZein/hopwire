@@ -26,8 +26,13 @@ export function money(minor: number, currency: string, compact = false): string 
   return f.format(minor / 10 ** digits)
 }
 
-const dt = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-export const fmtTime = (t: string | number) => dt.format(new Date(t))
+// ISO-style local time: "02/05/2026" is 2 May in London and Feb 5 in New York;
+// audit evidence must not be ambiguous.
+const pad = (n: number) => String(n).padStart(2, '0')
+export const fmtTime = (t: string | number) => {
+  const d = new Date(t)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
 export const fmtInt = (n: number) => n.toLocaleString()
 
 export function ago(t: string | number): string {
