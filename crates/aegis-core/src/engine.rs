@@ -53,6 +53,20 @@ impl Engine {
     /// Detectors see the graph *before* `txn` is added, plus `txn` itself.
     pub fn process(&mut self, txn: &Txn) -> Verdict {
         let start = Instant::now();
+        if txn.debtor == txn.creditor {
+            // Self-transfer (own pots, sub-accounts, reinvestment): no counterparty, no
+            // flow through the graph. Recorded nowhere so it cannot inflate velocity or
+            // fake a pass-through; the watermark still advances.
+            self.graph.advance(txn.ts_ms);
+            self.processed += 1;
+            return Verdict {
+                tx_id: txn.tx_id.clone(),
+                score: 0.0,
+                decision: crate::Decision::Allow,
+                findings: Vec::new(),
+                latency_us: start.elapsed().as_micros() as u64,
+            };
+        }
         let t = self.touch(txn);
         let (g, cfg) = (&self.graph, &self.cfg);
         let mut findings: Vec<Finding> = [
@@ -80,6 +94,11 @@ impl Engine {
 
     /// Ingest without scoring (used to rebuild state on restart).
     pub fn ingest(&mut self, txn: &Txn) {
+        if txn.debtor == txn.creditor {
+            self.graph.advance(txn.ts_ms);
+            self.processed += 1;
+            return;
+        }
         let t = self.touch(txn);
         self.commit(txn, &t);
     }

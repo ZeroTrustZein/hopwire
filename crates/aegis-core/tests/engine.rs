@@ -184,3 +184,20 @@ fn config_example_parses_to_defaults() {
         (7, 3, Config::default().cycle.budget)
     );
 }
+
+/// Self-transfers carry no counterparty: always allow, never add edges, and never
+/// let a later outflow look like pass-through of the "inflow" they would create.
+#[test]
+fn self_transfers_are_inert() {
+    let mut e = Engine::new(Config::default());
+    let v = e.process(&tx("s1", 0, 500_000, "a", "a"));
+    assert_eq!(v.decision, Decision::Allow);
+    assert!(v.findings.is_empty());
+    assert_eq!(e.stats().edges, 0);
+    assert_eq!(e.stats().processed, 1);
+    let v = e.process(&tx("out", MIN, 490_000, "a", "b"));
+    assert!(
+        !v.findings.iter().any(|f| f.rule == Rule::PassThrough),
+        "{v:#?}"
+    );
+}

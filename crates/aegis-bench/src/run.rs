@@ -208,13 +208,26 @@ pub fn run(
     }
 
     writeln!(w, "\n### Rule hits\n")?;
+    writeln!(w, "Rule precision = laundering share of txns carrying that finding. Lift = rule precision / base rate ({}).
+", pct(laundering, n))?;
     writeln!(
         w,
-        "| Rule | Txns with finding | On laundering txns | On flagged txns |"
+        "| Rule | Txns with finding | On laundering txns | On flagged txns | Rule precision | Lift |"
     )?;
-    writeln!(w, "|---|---|---|---|")?;
+    writeln!(w, "|---|---|---|---|---|---|")?;
+    let base = laundering as f64 / n.max(1) as f64;
     for (r, (a, b, c)) in &rule_hits {
-        writeln!(w, "| {} | {a} | {b} | {c} |", rule_name(*r))?;
+        let lift = if base > 0.0 && *a > 0 {
+            format!("{:.0}x", *b as f64 / *a as f64 / base)
+        } else {
+            "-".into()
+        };
+        writeln!(
+            w,
+            "| {} | {a} | {b} | {c} | {} | {lift} |",
+            rule_name(*r),
+            pct(*b, *a)
+        )?;
     }
 
     writeln!(w, "\n## Config\n\n```toml\n{}```", toml::to_string(&cfg)?)?;

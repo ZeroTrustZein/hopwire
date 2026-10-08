@@ -1,0 +1,17 @@
+# Engine profile for the IBM HI-Small benchmark (US/EU, multi-day ACH laundering).
+# Not a recommended production config: see docs/pilot.md for UK defaults.
+# IBM HI-Small: laundering unfolds over 1-8 days (gap p50 4.5h, p90 21h), not minutes.
+window_ms = 691200000          # 8d
+history_ms = 691200000
+[cycle]
+max_span_ms = 691200000        # 8d
+[fan_in]
+window_ms = 345600000          # 4d
+min_senders = 5
+min_new_senders = 5
+[fan_out]
+window_ms = 345600000          # 4d
+min_payees = 5
+[pass_through]
+within_ms = 21600000           # 6h (IBM intra-attempt gap p50 4.5h)
+weight = 0.45                  # corroborating only: alone it cannot reach review

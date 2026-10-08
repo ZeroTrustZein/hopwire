@@ -19,7 +19,7 @@ Latency = wall time of one `Engine::process()` call (ingest + all detectors).
 
 | Engine TPS | Wall TPS (incl. data gen/parse) | p50 µs | p90 µs | p99 µs | p99.9 µs | max µs | mean µs |
 |---|---|---|---|---|---|---|---|
-| 442103 | 338652 | 1.8 | 3.1 | 8.5 | 26.3 | 2672.6 | 2.3 |
+| 376375 | 294272 | 2.2 | 3.8 | 9.2 | 29.2 | 1643.5 | 2.7 |
 
 Final graph: 99305 nodes, 317606 edges, 67 hubs (window 72 h).
 
@@ -47,14 +47,16 @@ Attempt recall: an attempt counts as caught if any of its txns is flagged. Rules
 
 ### Rule hits
 
-| Rule | Txns with finding | On laundering txns | On flagged txns |
-|---|---|---|---|
-| cycle | 757 | 35 | 64 |
-| mule_fan_in | 573 | 573 | 436 |
-| pass_through | 383 | 231 | 315 |
-| fan_out | 1359 | 1214 | 1354 |
-| velocity | 578 | 576 | 578 |
-| shared_identifier | 801 | 203 | 159 |
+Rule precision = laundering share of txns carrying that finding. Lift = rule precision / base rate (0.1%).
+
+| Rule | Txns with finding | On laundering txns | On flagged txns | Rule precision | Lift |
+|---|---|---|---|---|---|
+| cycle | 757 | 35 | 64 | 4.6% | 41x |
+| mule_fan_in | 573 | 573 | 436 | 100.0% | 876x |
+| pass_through | 383 | 231 | 315 | 60.3% | 528x |
+| fan_out | 1359 | 1214 | 1354 | 89.3% | 783x |
+| velocity | 578 | 576 | 578 | 99.7% | 873x |
+| shared_identifier | 801 | 203 | 159 | 25.3% | 222x |
 
 ## Config
 
