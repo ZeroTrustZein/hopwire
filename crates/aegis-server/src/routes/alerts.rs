@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use aegis_core::{Finding, NodeKind, PathEdge, SubNode, Subgraph};
+use aegis_core::{Finding, NodeKind, PathEdge, SubNode, Subgraph, Txn};
 use axum::{extract::State, Json};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -266,6 +266,107 @@ pub async fn disposition(
     .await?;
     db.commit().await?;
     Ok(Json(d))
+}
+
+#[derive(Serialize)]
+pub struct SarExportResponse {
+    pub alert_id: Uuid,
+    pub narrative: aegis_ee::sar::GeneratedSarNarrative,
+    pub fincen_xml: String,
+    pub goaml_xml: String,
+}
+
+pub async fn generate_sar(
+    State(st): State<AppState>,
+    AppPath(id): AppPath<Uuid>,
+) -> ApiResult<SarExportResponse> {
+    let row: Option<(Jsonb<Txn>, Jsonb<Vec<aegis_core::Finding>>)> = sqlx::query_as(
+        "SELECT t.raw, a.findings FROM alerts a JOIN transactions t ON a.tx_id = t.tx_id WHERE a.id = $1"
+    )
+    .bind(id)
+    .fetch_optional(&st.pool)
+    .await?;
+
+    let (Jsonb(txn), Jsonb(findings)) = row.ok_or_else(|| alert_not_found(id))?;
+
+    let narrative = aegis_ee::sar::synthesize_narrative(&txn, &findings, "AegisGraph Pilot Bank");
+
+    let fincen_data = aegis_ee::sar::fincen::FinCenSarData {
+        filing_institution: "AegisGraph Pilot Bank".into(),
+        bsar_id: id.to_string(),
+        narrative: narrative.full_markdown.clone(),
+        suspicious_activity_from: chrono::DateTime::from_timestamp_millis(txn.ts_ms)
+            .map(|dt| dt.format("%Y%m%d").to_string())
+            .unwrap_or_else(|| "20261008".into()),
+        suspicious_activity_to: chrono::DateTime::from_timestamp_millis(txn.ts_ms)
+            .map(|dt| dt.format("%Y%m%d").to_string())
+            .unwrap_or_else(|| "20261008".into()),
+        total_amount_minor: txn.amount_minor,
+        currency: txn.currency.clone(),
+        subjects: vec![
+            aegis_ee::sar::fincen::FinCenSubject {
+                name: txn.debtor.clone(),
+                account_id: txn.debtor.clone(),
+                role: "Debtor".into(),
+                address: None,
+                tax_id: txn.debtor_customer_hash.clone(),
+            },
+            aegis_ee::sar::fincen::FinCenSubject {
+                name: txn.creditor.clone(),
+                account_id: txn.creditor.clone(),
+                role: "Creditor".into(),
+                address: None,
+                tax_id: txn.creditor_customer_hash.clone(),
+            },
+        ],
+        typologies: vec!["MoneyLaunderingLayering".into(), "FraudMuleNetwork".into()],
+    };
+    let fincen_xml = aegis_ee::sar::fincen::generate_fincen_xml(&fincen_data);
+
+    let goaml_data = aegis_ee::sar::uk_fiu::UkFiuSarData {
+        report_id: id.to_string(),
+        reporting_entity: "AegisGraph Pilot Bank".into(),
+        reason_for_suspicion: narrative.full_markdown.clone(),
+        action_taken: "Account settlement frozen; customer due diligence refreshed".into(),
+        parties: vec![
+            aegis_ee::sar::uk_fiu::GoAmlParty {
+                client_number: txn.debtor.clone(),
+                name: txn.debtor.clone(),
+                role: "Originator".into(),
+                account_number: txn.debtor.clone(),
+                institution_name: "Originating PSP".into(),
+            },
+            aegis_ee::sar::uk_fiu::GoAmlParty {
+                client_number: txn.creditor.clone(),
+                name: txn.creditor.clone(),
+                role: "Beneficiary".into(),
+                account_number: txn.creditor.clone(),
+                institution_name: "AegisGraph Pilot Bank".into(),
+            },
+        ],
+        transactions: vec![aegis_ee::sar::uk_fiu::GoAmlTransaction {
+            tx_id: txn.tx_id.clone(),
+            date: chrono::DateTime::from_timestamp_millis(txn.ts_ms)
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_default(),
+            amount_minor: txn.amount_minor,
+            currency: txn.currency.clone(),
+            from_account: txn.debtor.clone(),
+            to_account: txn.creditor.clone(),
+            description: format!(
+                "Suspicious payment flagged by AegisGraph: {}",
+                narrative.title
+            ),
+        }],
+    };
+    let goaml_xml = aegis_ee::sar::uk_fiu::generate_goaml_xml(&goaml_data);
+
+    Ok(Json(SarExportResponse {
+        alert_id: id,
+        narrative,
+        fincen_xml,
+        goaml_xml,
+    }))
 }
 
 fn alert_not_found(id: Uuid) -> AppError {

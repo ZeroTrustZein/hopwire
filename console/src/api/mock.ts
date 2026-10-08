@@ -193,6 +193,39 @@ export async function mockRequest(method: string, fullPath: string, body: unknow
       a.status = 'closed'
       return a.disposition
     }
+    case 'POST /alerts/:id/sar': {
+      const a = findAlert(id).detail
+      return {
+        alert_id: id,
+        narrative: {
+          title: `SUSPICIOUS ACTIVITY REPORT: ${a.rules.join(', ').toUpperCase()} on ${a.creditor}`,
+          executive_summary: `AegisGraph identified anomalous multi-hop transaction activity on account ${a.creditor} with risk score ${a.score.toFixed(2)}.`,
+          suspect_breakdown: `- Debtor: ${a.debtor}\n- Creditor: ${a.creditor}\n- Amount: £${(a.amount_minor / 100).toFixed(2)}`,
+          chronological_flow: `| Leg | From | To | Amount |\n|---|---|---|---|\n| 1 | ${a.debtor} | ${a.creditor} | £${(a.amount_minor/100).toFixed(2)} |`,
+          topological_analysis: a.findings.map(f => `- ${f.rule}: ${f.reason}`).join('\n'),
+          regulatory_nexus: 'Observed network flow indicates structured layering and mule aggregation under UK PSR reimbursement and EU instant clearing mandates.',
+          recommended_action: '1. Freeze account settlement privileges.\n2. File formal STR/SAR with UK FIU / FinCEN.',
+          full_markdown: `# SUSPICIOUS ACTIVITY REPORT\n\n## Summary\nAlert on ${a.creditor}\n\n## Findings\n${a.findings.map(f => f.reason).join('\n')}`,
+        },
+        fincen_xml: '<?xml version="1.0" encoding="UTF-8"?><EFilingBatchXML xmlns="www.fincen.gov/bsar"><Activity><ActivitySeqNum>' + id + '</ActivitySeqNum></Activity></EFilingBatchXML>',
+        goaml_xml: '<?xml version="1.0" encoding="UTF-8"?><report xmlns="http://www.unodc.org/goAML"><rentity_id>AEGIS</rentity_id></report>',
+      }
+    }
+    case 'GET /model/drift': {
+      return {
+        metric_name: 'alert_risk_scores',
+        total_psi: 0.042,
+        status: 'green',
+        baseline_count: 1000,
+        current_count: 1000,
+        bins: [
+          { bin_start: 0.0, bin_end: 0.1, baseline_pct: 0.85, current_pct: 0.84, psi_contribution: 0.001 },
+          { bin_start: 0.1, bin_end: 0.5, baseline_pct: 0.10, current_pct: 0.11, psi_contribution: 0.002 },
+          { bin_start: 0.5, bin_end: 0.85, baseline_pct: 0.03, current_pct: 0.032, psi_contribution: 0.001 },
+          { bin_start: 0.85, bin_end: 1.0, baseline_pct: 0.02, current_pct: 0.018, psi_contribution: 0.002 },
+        ],
+      }
+    }
     case 'GET /cases': {
       const st = q.get('status')
       const all = cases.filter((c) => !st || c.status === st).sort((x, y) => y.created_at.localeCompare(x.created_at))

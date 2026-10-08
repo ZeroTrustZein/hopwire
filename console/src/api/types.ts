@@ -120,6 +120,43 @@ export interface EngineStats {
   watermark_ms: number
 }
 
+export interface GeneratedSarNarrative {
+  title: string
+  executive_summary: string
+  suspect_breakdown: string
+  chronological_flow: string
+  topological_analysis: string
+  regulatory_nexus: string
+  recommended_action: string
+  full_markdown: string
+}
+
+export interface SarExportResponse {
+  alert_id: string
+  narrative: GeneratedSarNarrative
+  fincen_xml: string
+  goaml_xml: string
+}
+
+export type DriftStatus = 'green' | 'yellow' | 'red'
+
+export interface BinDistribution {
+  bin_start: number
+  bin_end: number
+  baseline_pct: number
+  current_pct: number
+  psi_contribution: number
+}
+
+export interface PsiReport {
+  metric_name: string
+  total_psi: number
+  status: DriftStatus
+  baseline_count: number
+  current_count: number
+  bins: BinDistribution[]
+}
+
 export interface AuditVerify {
   ok: boolean
   entries: number

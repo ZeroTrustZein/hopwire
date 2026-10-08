@@ -3,7 +3,12 @@
 use std::collections::HashSet;
 
 use aegis_core::{Decision, Txn, Verdict};
-use axum::{extract::State, Json};
+use axum::{
+    extract::State,
+    http::header,
+    response::{IntoResponse, Response},
+    Json,
+};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::PgConnection;
@@ -61,6 +66,80 @@ pub async fn score(
         verdict,
         alert_id: alert_ids[0],
     }))
+}
+
+#[derive(Serialize)]
+pub struct Iso20022Item {
+    pub tx_id: String,
+    pub decision: Decision,
+    pub score: f64,
+    pub alert_id: Option<Uuid>,
+    pub pacs002_xml: String,
+}
+
+/// Synchronous ISO 20022 pacs.008 customer credit transfer ingestion.
+/// Returns pacs.002 XML response when scoring a single transfer.
+pub async fn iso20022(State(st): State<AppState>, body: String) -> Result<Response, AppError> {
+    let pacs = aegis_iso20022::parse_pacs008(&body)
+        .map_err(|e| AppError::bad_request(format!("invalid pacs.008 XML: {e}")))?;
+    if pacs.is_empty() {
+        return Err(AppError::bad_request("pacs.008 contains no transactions"));
+    }
+
+    let mut items = Vec::with_capacity(pacs.len());
+    let mut db = st.pool.begin().await?;
+
+    for p in &pacs {
+        let txn = p.to_txn();
+        validate(&txn)?;
+        if insert_txns(&mut db, std::slice::from_ref(&txn))
+            .await?
+            .is_empty()
+        {
+            return Err(AppError::conflict(format!(
+                "duplicate tx_id: {}",
+                txn.tx_id
+            )));
+        }
+        let verdict = st.engine.process(txn.clone()).await?;
+        let alert_ids = record(
+            &mut db,
+            std::slice::from_ref(&txn),
+            std::slice::from_ref(&verdict),
+        )
+        .await?;
+        observe(std::slice::from_ref(&verdict));
+
+        let top_reason = verdict
+            .findings
+            .first()
+            .map(|f| f.reason.as_str())
+            .unwrap_or("Transaction evaluated compliant");
+        let pacs002 = aegis_iso20022::generate_pacs002(
+            &p.msg_id,
+            &txn.tx_id,
+            p.uetr.as_deref(),
+            verdict.decision,
+            top_reason,
+        );
+
+        items.push(Iso20022Item {
+            tx_id: txn.tx_id,
+            decision: verdict.decision,
+            score: verdict.score,
+            alert_id: alert_ids[0],
+            pacs002_xml: pacs002,
+        });
+    }
+
+    db.commit().await?;
+
+    if items.len() == 1 {
+        let xml = items.remove(0).pacs002_xml;
+        Ok(([(header::CONTENT_TYPE, "application/xml")], xml).into_response())
+    } else {
+        Ok(Json(items).into_response())
+    }
 }
 
 /// Replay path: same engine path, in array order. Txns whose `tx_id` is already

@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import AlertQueue from './pages/AlertQueue'
 import CaseList from './pages/CaseList'
 import CaseDetail from './pages/CaseDetail'
+import Governance from './pages/Governance'
 
 // Cytoscape is the bulk of the bundle; load it only on the alert detail route.
 const AlertDetail = lazy(() => import('./pages/AlertDetail'))
@@ -30,6 +31,7 @@ function Header({ onLogout }: { onLogout: () => void }) {
         <nav className="nav-links">
           <NavLink to="/alerts">Alerts</NavLink>
           <NavLink to="/cases">Cases</NavLink>
+          <NavLink to="/governance">Model Governance (SR 11-7)</NavLink>
         </nav>
       </div>
       <div className="header-right">
@@ -78,6 +80,7 @@ export default function App() {
           <Route path="/alerts/:id" element={<AlertDetail />} />
           <Route path="/cases" element={<CaseList />} />
           <Route path="/cases/:id" element={<CaseDetail />} />
+          <Route path="/governance" element={<Governance />} />
           <Route path="*" element={<Navigate to="/alerts" replace />} />
         </Routes>
         </Suspense>

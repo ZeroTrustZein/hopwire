@@ -10,6 +10,11 @@ hashbrown = "0.17"
 serde.workspace = true
 toml.workspace = true
 thiserror.workspace = true
+tract-onnx = { version = "0.23.8", optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true
+
+[features]
+default = []
+onnx = ["dep:tract-onnx"]

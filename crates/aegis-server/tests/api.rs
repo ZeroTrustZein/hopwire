@@ -45,6 +45,8 @@ async fn api_suite() {
         audit_verify_and_tamper,
         restart_rebuild,
         ops_endpoints,
+        iso20022_ingest,
+        sar_generation_test,
     );
 }
 
@@ -541,6 +543,70 @@ async fn ops_endpoints(pool: PgPool) {
     ] {
         assert!(text.contains(m), "{m} missing from /metrics:\n{text}");
     }
+}
+
+async fn iso20022_ingest(pool: PgPool) {
+    let a = TestApp::new(pool).await;
+    let sample_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08">
+  <FIToFICstmrCdtTrf>
+    <GrpHdr>
+      <MsgId>MSG-ISO-TEST-1</MsgId>
+      <CreDtTm>2026-10-08T18:00:00Z</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+    </GrpHdr>
+    <CdtTrfTxInf>
+      <PmtId>
+        <EndToEndId>E2E-ISO-1</EndToEndId>
+        <UETR>d1a80101-1111-2222-3333-444455556666</UETR>
+      </PmtId>
+      <IntrBkSttlmAmt Ccy="GBP">1250.00</IntrBkSttlmAmt>
+      <Dbtr><Nm>Alice Corp</Nm></Dbtr>
+      <DbtrAcct><Id>GB99BARC20000011111111</Id></DbtrAcct>
+      <Cdtr><Nm>Bob Retail</Nm></Cdtr>
+      <CdtrAcct><Id>GB88BARC20000022222222</Id></CdtrAcct>
+    </CdtTrfTxInf>
+  </FIToFICstmrCdtTrf>
+</Document>"#;
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/ingest/iso20022")
+        .header("authorization", format!("Bearer {KEY}"))
+        .header("content-type", "application/xml")
+        .body(Body::from(sample_xml))
+        .unwrap();
+    let res = a.router.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        res.headers().get("content-type").unwrap(),
+        "application/xml"
+    );
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let xml = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(xml.contains("<FIToFIPmtStsRpt>"));
+    assert!(xml.contains("<OrgnlMsgId>MSG-ISO-TEST-1</OrgnlMsgId>"));
+    assert!(xml.contains("<TxSts>ACTC</TxSts>"));
+}
+
+async fn sar_generation_test(pool: PgPool) {
+    let a = TestApp::new(pool).await;
+    let al = make_alert(&a, "sar").await;
+    let (s, res) = a.post(&format!("/v1/alerts/{al}/sar"), json!({})).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(res["alert_id"], al.as_str());
+    assert!(res["narrative"]["full_markdown"]
+        .as_str()
+        .unwrap()
+        .contains("SUSPICIOUS ACTIVITY REPORT"));
+    assert!(res["fincen_xml"]
+        .as_str()
+        .unwrap()
+        .contains("<EFilingBatchXML"));
+    assert!(res["goaml_xml"]
+        .as_str()
+        .unwrap()
+        .contains("<report xmlns=\"http://www.unodc.org/goAML\">"));
 }
 
 // ---------------------------------------------------------------- helpers

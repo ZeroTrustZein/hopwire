@@ -1,6 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["crates/aegis-core", "crates/aegis-server", "crates/aegis-bench"]
+members = [
+    "crates/aegis-core",
+    "crates/aegis-server",
+    "crates/aegis-bench",
+    "crates/aegis-iso20022",
+    "crates/aegis-ee",
+]
 
 [workspace.package]
 version = "0.1.0"

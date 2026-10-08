@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../api/client'
-import type { AlertDetail as Alert, DispositionLabel } from '../api/types'
+import type { AlertDetail as Alert, DispositionLabel, SarExportResponse } from '../api/types'
 import { Pill, ScoreBar } from '../components'
 import GraphView from '../GraphView'
 import { errMsg, fmtTime, money, RULE_LABEL, useLoad } from '../util'
@@ -17,6 +17,8 @@ export default function AlertDetail() {
   const graph = useLoad(() => api.subgraph(id, hops), [id, hops])
   const [busy, setBusy] = useState(false)
   const [actionErr, setActionErr] = useState<string>()
+  const [sarData, setSarData] = useState<SarExportResponse | null>(null)
+  const [sarLoading, setSarLoading] = useState(false)
 
   const a = alert.data
   if (alert.error && !a) return <div className="page"><div className="error-banner">{alert.error}</div></div>
@@ -33,6 +35,19 @@ export default function AlertDetail() {
     } catch (e) {
       setActionErr(errMsg(e))
       setBusy(false)
+    }
+  }
+
+  async function loadSar() {
+    setSarLoading(true)
+    setActionErr(undefined)
+    try {
+      const res = await api.generateSar(id)
+      setSarData(res)
+    } catch (e) {
+      setActionErr(errMsg(e))
+    } finally {
+      setSarLoading(false)
     }
   }
 
@@ -54,12 +69,17 @@ export default function AlertDetail() {
           </div>
         </div>
         <div className="filter-group">
+          <button className="sm" onClick={loadSar} disabled={sarLoading}>
+            {sarLoading ? 'Generating SAR…' : '⚖ Generate SAR Narrative'}
+          </button>
           {a.case_id
             ? <Link className="btn-link" to={`/cases/${a.case_id}`}>Open case →</Link>
             : <button className="primary" disabled={busy || a.status === 'closed'} onClick={() => escalate(a)}>Escalate to case</button>}
         </div>
       </div>
       {actionErr && <div className="error-banner">{actionErr}</div>}
+
+      {sarData && <SarModal sar={sarData} onClose={() => setSarData(null)} />}
 
       <div className="split-view">
         <div className="col">
@@ -136,6 +156,91 @@ export default function AlertDetail() {
             </div>
           </div>
           <DispositionCard alert={a} onDone={alert.reload} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SarModal({ sar, onClose }: { sar: SarExportResponse; onClose: () => void }) {
+  const [tab, setTab] = useState<'narrative' | 'fincen' | 'goaml'>('narrative')
+
+  const download = (content: string, filename: string, type: string) => {
+    const blob = new Blob([content], { type })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card sar-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Suspicious Activity Report Studio</h3>
+          <button className="sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="sar-tabs">
+          <button className={tab === 'narrative' ? 'active' : ''} onClick={() => setTab('narrative')}>
+            Narrative (Markdown)
+          </button>
+          <button className={tab === 'fincen' ? 'active' : ''} onClick={() => setTab('fincen')}>
+            FinCEN BSAR XML
+          </button>
+          <button className={tab === 'goaml' ? 'active' : ''} onClick={() => setTab('goaml')}>
+            UK FIU / goAML XML
+          </button>
+        </div>
+        <div className="sar-content">
+          {tab === 'narrative' && (
+            <div className="sar-narrative-view">
+              <pre>{sar.narrative.full_markdown}</pre>
+            </div>
+          )}
+          {tab === 'fincen' && (
+            <div className="sar-xml-view">
+              <pre>{sar.fincen_xml}</pre>
+            </div>
+          )}
+          {tab === 'goaml' && (
+            <div className="sar-xml-view">
+              <pre>{sar.goaml_xml}</pre>
+            </div>
+          )}
+        </div>
+        <div className="modal-actions">
+          {tab === 'narrative' && (
+            <button
+              onClick={() =>
+                download(sar.narrative.full_markdown, `SAR-${sar.alert_id.slice(0, 8)}.md`, 'text/markdown')
+              }
+            >
+              Download Markdown
+            </button>
+          )}
+          {tab === 'fincen' && (
+            <button
+              className="primary"
+              onClick={() =>
+                download(sar.fincen_xml, `FinCEN-BSAR-${sar.alert_id.slice(0, 8)}.xml`, 'application/xml')
+              }
+            >
+              Export FinCEN XML
+            </button>
+          )}
+          {tab === 'goaml' && (
+            <button
+              className="primary"
+              onClick={() =>
+                download(sar.goaml_xml, `goAML-${sar.alert_id.slice(0, 8)}.xml`, 'application/xml')
+              }
+            >
+              Export goAML XML
+            </button>
+          )}
+          <button onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

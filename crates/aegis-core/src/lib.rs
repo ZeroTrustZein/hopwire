@@ -4,8 +4,10 @@
 
 pub mod config;
 mod detectors;
+pub mod drift;
 mod engine;
 mod graph;
+pub mod ml;
 mod score;
 pub mod types;
 

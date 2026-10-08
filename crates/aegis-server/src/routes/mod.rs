@@ -25,6 +25,7 @@ use crate::{
 pub fn v1() -> Router<AppState> {
     Router::new()
         .route("/v1/score", post(score::score))
+        .route("/v1/ingest/iso20022", post(score::iso20022))
         .route(
             "/v1/transactions",
             // 10 000 txns comfortably exceed axum's 2 MB default.
@@ -34,11 +35,13 @@ pub fn v1() -> Router<AppState> {
         .route("/v1/alerts/{id}", get(alerts::get))
         .route("/v1/alerts/{id}/subgraph", get(alerts::subgraph))
         .route("/v1/alerts/{id}/disposition", post(alerts::disposition))
+        .route("/v1/alerts/{id}/sar", post(alerts::generate_sar))
         .route("/v1/cases", get(cases::list).post(cases::create))
         .route("/v1/cases/{id}", get(cases::get).patch(cases::patch))
         .route("/v1/cases/{id}/notes", post(cases::add_note))
         .route("/v1/stats", get(stats))
         .route("/v1/audit/verify", get(audit_verify))
+        .route("/v1/model/drift", get(model_drift))
 }
 
 pub async fn metrics(State(st): State<AppState>) -> impl IntoResponse {
@@ -62,6 +65,26 @@ async fn stats(State(st): State<AppState>) -> ApiResult<aegis_core::EngineStats>
 
 async fn audit_verify(State(st): State<AppState>) -> ApiResult<audit::Verify> {
     Ok(Json(audit::verify(&st.pool).await?))
+}
+
+async fn model_drift(State(st): State<AppState>) -> ApiResult<aegis_core::drift::PsiReport> {
+    let scores: Vec<f64> =
+        sqlx::query_scalar("SELECT score FROM alerts ORDER BY created_at DESC LIMIT 2000")
+            .fetch_all(&st.pool)
+            .await?;
+
+    let mid = scores.len() / 2;
+    let (current, baseline) = if mid > 0 {
+        (&scores[..mid], &scores[mid..])
+    } else {
+        (scores.as_slice(), scores.as_slice())
+    };
+
+    Ok(Json(aegis_core::drift::calculate_psi(
+        "alert_risk_scores",
+        baseline,
+        current,
+    )))
 }
 
 #[derive(Serialize)]

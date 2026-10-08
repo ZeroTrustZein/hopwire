@@ -1,6 +1,7 @@
 import type {
   AlertDetail, AlertFilters, AlertSummary, AuditVerify, Case, CaseDetail, CaseFilters,
-  CaseStatus, Disposition, DispositionLabel, EngineStats, Note, Paginated, Subgraph,
+  CaseStatus, Disposition, DispositionLabel, EngineStats, Note, Paginated, PsiReport,
+  SarExportResponse, Subgraph,
 } from './types'
 
 const BASE = (import.meta.env.VITE_API_URL ?? '/').replace(/\/$/, '')
@@ -67,4 +68,6 @@ export const api = {
   createCase: (b: { title: string; alert_ids: string[]; assignee?: string }) => request<Case>('POST', '/v1/cases', b),
   patchCase: (id: string, b: { status?: CaseStatus; assignee?: string }) => request<Case>('PATCH', `/v1/cases/${id}`, b),
   addNote: (id: string, b: { author: string; body: string }) => request<Note>('POST', `/v1/cases/${id}/notes`, b),
+  generateSar: (id: string) => request<SarExportResponse>('POST', `/v1/alerts/${id}/sar`, {}),
+  drift: () => request<PsiReport>('GET', '/v1/model/drift'),
 }
