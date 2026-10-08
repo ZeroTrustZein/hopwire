@@ -9,7 +9,11 @@ use axum::{
 
 use crate::{error::AppError, AppState};
 
-pub async fn require_key(State(st): State<AppState>, req: Request, next: Next) -> Result<Response, AppError> {
+pub async fn require_key(
+    State(st): State<AppState>,
+    req: Request,
+    next: Next,
+) -> Result<Response, AppError> {
     let token = req
         .headers()
         .get(AUTHORIZATION)

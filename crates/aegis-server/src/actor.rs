@@ -10,7 +10,12 @@ enum Cmd {
     Process(Txn, oneshot::Sender<Verdict>),
     ProcessBatch(Vec<Txn>, oneshot::Sender<Vec<Verdict>>),
     Ingest(Vec<Txn>, oneshot::Sender<()>),
-    Subgraph { node_ids: Vec<String>, hops: u8, max_edges: usize, reply: oneshot::Sender<Vec<Subgraph>> },
+    Subgraph {
+        node_ids: Vec<String>,
+        hops: u8,
+        max_edges: usize,
+        reply: oneshot::Sender<Vec<Subgraph>>,
+    },
     Stats(oneshot::Sender<EngineStats>),
 }
 
@@ -38,9 +43,17 @@ impl EngineHandle {
                             ts.iter().for_each(|t| engine.ingest(t));
                             let _ = r.send(());
                         }
-                        Cmd::Subgraph { node_ids, hops, max_edges, reply } => {
+                        Cmd::Subgraph {
+                            node_ids,
+                            hops,
+                            max_edges,
+                            reply,
+                        } => {
                             let _ = reply.send(
-                                node_ids.iter().map(|n| engine.subgraph(n, hops, max_edges)).collect(),
+                                node_ids
+                                    .iter()
+                                    .map(|n| engine.subgraph(n, hops, max_edges))
+                                    .collect(),
                             );
                         }
                         Cmd::Stats(r) => {
@@ -71,8 +84,19 @@ impl EngineHandle {
         self.call(|r| Cmd::Ingest(ts, r)).await
     }
 
-    pub async fn subgraphs(&self, node_ids: Vec<String>, hops: u8, max_edges: usize) -> Result<Vec<Subgraph>> {
-        self.call(|reply| Cmd::Subgraph { node_ids, hops, max_edges, reply }).await
+    pub async fn subgraphs(
+        &self,
+        node_ids: Vec<String>,
+        hops: u8,
+        max_edges: usize,
+    ) -> Result<Vec<Subgraph>> {
+        self.call(|reply| Cmd::Subgraph {
+            node_ids,
+            hops,
+            max_edges,
+            reply,
+        })
+        .await
     }
 
     pub async fn stats(&self) -> Result<EngineStats> {

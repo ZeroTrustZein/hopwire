@@ -31,36 +31,72 @@ pub struct BatchResponse {
     alerts: usize,
 }
 
-pub async fn score(State(st): State<AppState>, AppJson(txn): AppJson<Txn>) -> ApiResult<ScoreResponse> {
+pub async fn score(
+    State(st): State<AppState>,
+    AppJson(txn): AppJson<Txn>,
+) -> ApiResult<ScoreResponse> {
     validate(&txn)?;
     let mut db = st.pool.begin().await?;
     // Insert first: the unique tx_id makes duplicates (even concurrent ones) a 409
     // before the engine ever sees them.
-    if insert_txns(&mut db, std::slice::from_ref(&txn)).await?.is_empty() {
-        return Err(AppError::conflict(format!("duplicate tx_id: {}", txn.tx_id)));
+    if insert_txns(&mut db, std::slice::from_ref(&txn))
+        .await?
+        .is_empty()
+    {
+        return Err(AppError::conflict(format!(
+            "duplicate tx_id: {}",
+            txn.tx_id
+        )));
     }
     let verdict = st.engine.process(txn.clone()).await?;
-    let alert_ids = record(&mut db, std::slice::from_ref(&txn), std::slice::from_ref(&verdict)).await?;
+    let alert_ids = record(
+        &mut db,
+        std::slice::from_ref(&txn),
+        std::slice::from_ref(&verdict),
+    )
+    .await?;
     db.commit().await?;
     observe(std::slice::from_ref(&verdict));
-    Ok(Json(ScoreResponse { verdict, alert_id: alert_ids[0] }))
+    Ok(Json(ScoreResponse {
+        verdict,
+        alert_id: alert_ids[0],
+    }))
 }
 
 /// Replay path: same engine path, in array order. Txns whose `tx_id` is already
 /// stored (or repeated within the batch) are skipped, so replays are idempotent.
-pub async fn batch(State(st): State<AppState>, AppJson(txns): AppJson<Vec<Txn>>) -> ApiResult<BatchResponse> {
+pub async fn batch(
+    State(st): State<AppState>,
+    AppJson(txns): AppJson<Vec<Txn>>,
+) -> ApiResult<BatchResponse> {
     if txns.len() > MAX_BATCH {
-        return Err(AppError::bad_request(format!("batch exceeds {MAX_BATCH} transactions")));
+        return Err(AppError::bad_request(format!(
+            "batch exceeds {MAX_BATCH} transactions"
+        )));
     }
     txns.iter().try_for_each(validate)?;
     let mut db = st.pool.begin().await?;
     let mut fresh: HashSet<String> = insert_txns(&mut db, &txns).await?.into_iter().collect();
-    let txns: Vec<Txn> = txns.into_iter().filter(|t| fresh.remove(&t.tx_id)).collect();
-    let verdicts = if txns.is_empty() { vec![] } else { st.engine.process_batch(txns.clone()).await? };
-    let alerts = record(&mut db, &txns, &verdicts).await?.into_iter().flatten().count();
+    let txns: Vec<Txn> = txns
+        .into_iter()
+        .filter(|t| fresh.remove(&t.tx_id))
+        .collect();
+    let verdicts = if txns.is_empty() {
+        vec![]
+    } else {
+        st.engine.process_batch(txns.clone()).await?
+    };
+    let alerts = record(&mut db, &txns, &verdicts)
+        .await?
+        .into_iter()
+        .flatten()
+        .count();
     db.commit().await?;
     observe(&verdicts);
-    Ok(Json(BatchResponse { accepted: txns.len(), alerts }))
+    Ok(Json(BatchResponse {
+        accepted: txns.len(),
+        alerts,
+    }))
 }
 
 fn validate(t: &Txn) -> Result<(), AppError> {
@@ -69,7 +105,10 @@ fn validate(t: &Txn) -> Result<(), AppError> {
     super::require("creditor", &t.creditor)?;
     super::require("currency", &t.currency)?;
     if t.amount_minor <= 0 {
-        return Err(AppError::bad_request(format!("{}: amount_minor must be > 0", t.tx_id)));
+        return Err(AppError::bad_request(format!(
+            "{}: amount_minor must be > 0",
+            t.tx_id
+        )));
     }
     Ok(())
 }
@@ -90,7 +129,11 @@ async fn insert_txns(db: &mut PgConnection, txns: &[Txn]) -> Result<Vec<String>,
 }
 
 /// Create alerts for non-allow verdicts and append audit rows. Returns per-txn alert id.
-async fn record(db: &mut PgConnection, txns: &[Txn], verdicts: &[Verdict]) -> Result<Vec<Option<Uuid>>, AppError> {
+async fn record(
+    db: &mut PgConnection,
+    txns: &[Txn],
+    verdicts: &[Verdict],
+) -> Result<Vec<Option<Uuid>>, AppError> {
     let mut ids = Vec::with_capacity(txns.len());
     let mut audit_rows = Vec::with_capacity(txns.len());
     let mut a = AlertCols::default();
@@ -103,8 +146,8 @@ async fn record(db: &mut PgConnection, txns: &[Txn], verdicts: &[Verdict]) -> Re
             }
         }
         let decision = enum_str(&v.decision);
-        let score_rounded = (v.score * 10_000.0).round() / 10_000.0;
-        let summary = json!({ "tx_id": t.tx_id, "score": score_rounded, "decision": decision, "rules": rules });
+        let summary =
+            json!({ "tx_id": t.tx_id, "score": v.score, "decision": decision, "rules": rules });
         audit_rows.push(Entry::new("api", "txn.scored", &t.tx_id, summary.clone()));
         if v.decision == Decision::Allow {
             ids.push(None);
@@ -178,7 +221,8 @@ fn observe(verdicts: &[Verdict]) {
     for v in verdicts {
         metrics::histogram!("aegis_score_latency_us").record(v.latency_us as f64);
         if v.decision != Decision::Allow {
-            metrics::counter!("aegis_alerts_total", "decision" => enum_str(&v.decision)).increment(1);
+            metrics::counter!("aegis_alerts_total", "decision" => enum_str(&v.decision))
+                .increment(1);
         }
     }
 }

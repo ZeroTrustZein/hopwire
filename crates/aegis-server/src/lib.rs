@@ -54,7 +54,10 @@ impl AppState {
 }
 
 pub fn app(state: AppState) -> Router {
-    let v1 = routes::v1().route_layer(middleware::from_fn_with_state(state.clone(), auth::require_key));
+    let v1 = routes::v1().route_layer(middleware::from_fn_with_state(
+        state.clone(),
+        auth::require_key,
+    ));
     let mut router = Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/metrics", get(routes::metrics))
@@ -63,7 +66,11 @@ pub fn app(state: AppState) -> Router {
         .method_not_allowed_fallback(routes::method_not_allowed)
         .with_state(state.clone())
         .layer(TraceLayer::new_for_http());
-    if let Some(origin) = state.cors_origin.as_deref().and_then(|o| HeaderValue::from_str(o).ok()) {
+    if let Some(origin) = state
+        .cors_origin
+        .as_deref()
+        .and_then(|o| HeaderValue::from_str(o).ok())
+    {
         router = router.layer(
             CorsLayer::new()
                 .allow_origin(origin)

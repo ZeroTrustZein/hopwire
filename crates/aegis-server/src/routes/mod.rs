@@ -42,7 +42,10 @@ pub fn v1() -> Router<AppState> {
 }
 
 pub async fn metrics(State(st): State<AppState>) -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "text/plain; version=0.0.4")], st.metrics.render())
+    (
+        [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+        st.metrics.render(),
+    )
 }
 
 pub async fn not_found() -> AppError {
@@ -91,7 +94,10 @@ where
 
 /// Serde string form of a unit enum (`Decision::Review` → `"review"`).
 fn enum_str<T: Serialize>(v: &T) -> String {
-    serde_json::to_value(v).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default()
+    serde_json::to_value(v)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default()
 }
 
 fn require(field: &str, v: &str) -> Result<(), AppError> {
@@ -103,9 +109,10 @@ fn require(field: &str, v: &str) -> Result<(), AppError> {
 
 fn one_of(field: &str, v: &Option<String>, allowed: &[&str]) -> Result<(), AppError> {
     match v {
-        Some(s) if !allowed.contains(&s.as_str()) => {
-            Err(AppError::bad_request(format!("{field} must be one of {}", allowed.join(", "))))
-        }
+        Some(s) if !allowed.contains(&s.as_str()) => Err(AppError::bad_request(format!(
+            "{field} must be one of {}",
+            allowed.join(", ")
+        ))),
         _ => Ok(()),
     }
 }

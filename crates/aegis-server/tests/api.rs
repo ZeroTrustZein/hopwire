@@ -62,7 +62,9 @@ async fn auth_and_errors(pool: PgPool) {
         assert_eq!(body, json!({"error": "unauthorized"}));
     }
     assert_eq!(a.raw("/healthz").await, (StatusCode::OK, "ok".into()));
-    let (s, body) = a.get("/v1/alerts/00000000-0000-4000-8000-000000000000").await;
+    let (s, body) = a
+        .get("/v1/alerts/00000000-0000-4000-8000-000000000000")
+        .await;
     assert_eq!(s, StatusCode::NOT_FOUND);
     assert!(body["error"].is_string());
     let (s, body) = a.get("/v1/alerts/not-a-uuid").await;
@@ -87,7 +89,12 @@ async fn score_cycle_creates_alert(pool: PgPool) {
     assert_ne!(v["decision"], "allow", "{v}");
     assert_eq!(v["tx_id"], "c3");
     assert!(v["latency_us"].is_u64() && v["score"].is_f64());
-    let cyc = v["findings"].as_array().unwrap().iter().find(|f| f["rule"] == "cycle").expect("cycle finding");
+    let cyc = v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["rule"] == "cycle")
+        .expect("cycle finding");
     assert_eq!(cyc["path"].as_array().unwrap().len(), 3);
     let id = v["alert_id"].as_str().expect("alert_id").to_string();
 
@@ -119,18 +126,43 @@ async fn score_cycle_creates_alert(pool: PgPool) {
     for pe in cyc["path"].as_array().unwrap() {
         assert!(edges.contains(pe), "path edge {pe} missing from subgraph");
     }
-    let ids: Vec<&str> = g["nodes"].as_array().unwrap().iter().map(|n| n["id"].as_str().unwrap()).collect();
+    let ids: Vec<&str> = g["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n["id"].as_str().unwrap())
+        .collect();
     for n in ["c-acc1", "c-acc2", "c-acc3"] {
         assert!(ids.contains(&n));
     }
-    let mut keys: Vec<_> = edges.iter().map(|e| (e["kind"].clone(), e["from"].clone(), e["to"].clone(), e["tx_id"].clone())).map(|k| format!("{k:?}")).collect();
+    let mut keys: Vec<_> = edges
+        .iter()
+        .map(|e| {
+            (
+                e["kind"].clone(),
+                e["from"].clone(),
+                e["to"].clone(),
+                e["tx_id"].clone(),
+            )
+        })
+        .map(|k| format!("{k:?}"))
+        .collect();
     let n = keys.len();
     keys.sort();
     keys.dedup();
     assert_eq!(keys.len(), n, "subgraph edges deduped");
-    assert_eq!(a.get(&format!("/v1/alerts/{id}/subgraph?hops=1")).await.0, StatusCode::OK);
-    assert_eq!(a.get(&format!("/v1/alerts/{id}/subgraph?hops=4")).await.0, StatusCode::BAD_REQUEST);
-    assert_eq!(a.get(&format!("/v1/alerts/{id}/subgraph?hops=0")).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        a.get(&format!("/v1/alerts/{id}/subgraph?hops=1")).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        a.get(&format!("/v1/alerts/{id}/subgraph?hops=4")).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        a.get(&format!("/v1/alerts/{id}/subgraph?hops=0")).await.0,
+        StatusCode::BAD_REQUEST
+    );
 }
 
 async fn batch_ingest(pool: PgPool) {
@@ -149,9 +181,16 @@ async fn batch_ingest(pool: PgPool) {
     assert_eq!(list["total"], 2);
     let (_, stats) = a.get("/v1/stats").await;
     assert_eq!(stats["processed"], 7);
-    let too_many: Vec<Value> = (0..10_001).map(|i| txn(&format!("m{i}"), "m-a", "m-b", T0, 1)).collect();
-    assert_eq!(a.post("/v1/transactions", json!(too_many)).await.0, StatusCode::BAD_REQUEST);
-    let (s, _) = a.post("/v1/transactions", json!([txn("bad", "a", "b", T0, 0)])).await;
+    let too_many: Vec<Value> = (0..10_001)
+        .map(|i| txn(&format!("m{i}"), "m-a", "m-b", T0, 1))
+        .collect();
+    assert_eq!(
+        a.post("/v1/transactions", json!(too_many)).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    let (s, _) = a
+        .post("/v1/transactions", json!([txn("bad", "a", "b", T0, 0)]))
+        .await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
 }
 
@@ -165,7 +204,10 @@ async fn alert_filters_and_pagination(pool: PgPool) {
     let items = all["items"].as_array().unwrap();
     assert_eq!(items[0]["tx_id"], "f33", "newest first");
     assert_eq!(items[2]["tx_id"], "f13");
-    assert!(items[0].get("findings").is_none(), "summary has no findings");
+    assert!(
+        items[0].get("findings").is_none(),
+        "summary has no findings"
+    );
 
     let (_, page) = a.get("/v1/alerts?limit=1&offset=1").await;
     assert_eq!(page["total"], 3);
@@ -177,25 +219,53 @@ async fn alert_filters_and_pagination(pool: PgPool) {
     assert_eq!(a.get("/v1/alerts?rule=fan_out").await.1["total"], 0);
     assert_eq!(a.get("/v1/alerts?min_score=0.0").await.1["total"], 3);
     assert_eq!(a.get("/v1/alerts?min_score=1.01").await.1["total"], 0);
-    assert_eq!(a.get("/v1/alerts?status=&rule=&min_score=").await.1["total"], 3);
+    assert_eq!(
+        a.get("/v1/alerts?status=&rule=&min_score=").await.1["total"],
+        3
+    );
 
     let id = items[0]["id"].as_str().unwrap();
-    a.post(&format!("/v1/alerts/{id}/disposition"), json!({"label": "false_positive", "analyst": "ann"})).await;
+    a.post(
+        &format!("/v1/alerts/{id}/disposition"),
+        json!({"label": "false_positive", "analyst": "ann"}),
+    )
+    .await;
     assert_eq!(a.get("/v1/alerts?status=open").await.1["total"], 2);
     let (_, closed) = a.get("/v1/alerts?status=closed").await;
     assert_eq!(closed["total"], 1);
     assert_eq!(closed["items"][0]["id"], id);
-    assert_eq!(a.get("/v1/alerts?status=bogus").await.0, StatusCode::BAD_REQUEST);
-    assert_eq!(a.get("/v1/alerts?limit=-1").await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        a.get("/v1/alerts?status=bogus").await.0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        a.get("/v1/alerts?limit=-1").await.0,
+        StatusCode::BAD_REQUEST
+    );
 }
 
 async fn disposition_closes_alert(pool: PgPool) {
     let a = TestApp::new(pool).await;
     let id = make_alert(&a, "d").await;
     let url = format!("/v1/alerts/{id}/disposition");
-    assert_eq!(a.post(&url, json!({"label": "maybe", "analyst": "ann"})).await.0, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(a.post(&url, json!({"label": "true_positive", "analyst": ""})).await.0, StatusCode::BAD_REQUEST);
-    let (s, d) = a.post(&url, json!({"label": "true_positive", "analyst": "ann", "note": "mule ring"})).await;
+    assert_eq!(
+        a.post(&url, json!({"label": "maybe", "analyst": "ann"}))
+            .await
+            .0,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(
+        a.post(&url, json!({"label": "true_positive", "analyst": ""}))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    let (s, d) = a
+        .post(
+            &url,
+            json!({"label": "true_positive", "analyst": "ann", "note": "mule ring"}),
+        )
+        .await;
     assert_eq!(s, StatusCode::OK, "{d}");
     assert_eq!(d["alert_id"], id.as_str());
     assert_eq!(d["label"], "true_positive");
@@ -205,16 +275,35 @@ async fn disposition_closes_alert(pool: PgPool) {
     let (_, detail) = a.get(&format!("/v1/alerts/{id}")).await;
     assert_eq!(detail["status"], "closed");
     assert_eq!(detail["disposition"], d);
-    assert_eq!(a.post(&url, json!({"label": "false_positive", "analyst": "bob"})).await.0, StatusCode::CONFLICT);
+    assert_eq!(
+        a.post(&url, json!({"label": "false_positive", "analyst": "bob"}))
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
     let missing = "/v1/alerts/00000000-0000-4000-8000-000000000000/disposition";
-    assert_eq!(a.post(missing, json!({"label": "true_positive", "analyst": "a"})).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(
+        a.post(missing, json!({"label": "true_positive", "analyst": "a"}))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
 }
 
 async fn cases_and_notes(pool: PgPool) {
     let a = TestApp::new(pool).await;
-    let (al1, al2, al3) = (make_alert(&a, "k1").await, make_alert(&a, "k2").await, make_alert(&a, "k3").await);
+    let (al1, al2, al3) = (
+        make_alert(&a, "k1").await,
+        make_alert(&a, "k2").await,
+        make_alert(&a, "k3").await,
+    );
 
-    let (s, c) = a.post("/v1/cases", json!({"title": "Ring A", "alert_ids": [al1, al2], "assignee": "ann"})).await;
+    let (s, c) = a
+        .post(
+            "/v1/cases",
+            json!({"title": "Ring A", "alert_ids": [al1, al2], "assignee": "ann"}),
+        )
+        .await;
     assert_eq!(s, StatusCode::OK, "{c}");
     assert_eq!(c["title"], "Ring A");
     assert_eq!(c["status"], "open");
@@ -227,7 +316,10 @@ async fn cases_and_notes(pool: PgPool) {
         assert_eq!(d["status"], "escalated");
         assert_eq!(d["case_id"], cid.as_str());
     }
-    assert_eq!(a.get(&format!("/v1/alerts/{al3}")).await.1["status"], "open");
+    assert_eq!(
+        a.get(&format!("/v1/alerts/{al3}")).await.1["status"],
+        "open"
+    );
     assert_eq!(a.get("/v1/alerts?status=escalated").await.1["total"], 2);
 
     let (s, c2) = a.post("/v1/cases", json!({"title": "Empty"})).await;
@@ -236,38 +328,75 @@ async fn cases_and_notes(pool: PgPool) {
     assert_eq!(c2["assignee"], Value::Null);
     let bad = json!({"title": "x", "alert_ids": ["00000000-0000-4000-8000-000000000000"]});
     assert_eq!(a.post("/v1/cases", bad).await.0, StatusCode::BAD_REQUEST);
-    assert_eq!(a.post("/v1/cases", json!({"title": ""})).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        a.post("/v1/cases", json!({"title": ""})).await.0,
+        StatusCode::BAD_REQUEST
+    );
 
-    let (s, n) = a.post(&format!("/v1/cases/{cid}/notes"), json!({"author": "ann", "body": "called bank"})).await;
+    let (s, n) = a
+        .post(
+            &format!("/v1/cases/{cid}/notes"),
+            json!({"author": "ann", "body": "called bank"}),
+        )
+        .await;
     assert_eq!(s, StatusCode::OK, "{n}");
     assert_eq!(n["case_id"], cid.as_str());
     assert_eq!(n["author"], "ann");
     assert_eq!(n["body"], "called bank");
     assert!(n["id"].is_string() && n["created_at"].is_string());
     let missing = "/v1/cases/00000000-0000-4000-8000-000000000000/notes";
-    assert_eq!(a.post(missing, json!({"author": "a", "body": "b"})).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(
+        a.post(missing, json!({"author": "a", "body": "b"})).await.0,
+        StatusCode::NOT_FOUND
+    );
 
-    let (s, p) = a.patch(&format!("/v1/cases/{cid}"), json!({"status": "in_review"})).await;
+    let (s, p) = a
+        .patch(&format!("/v1/cases/{cid}"), json!({"status": "in_review"}))
+        .await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(p["status"], "in_review");
     assert_eq!(p["assignee"], "ann", "absent assignee unchanged");
-    let (_, p) = a.patch(&format!("/v1/cases/{cid}"), json!({"assignee": "bob"})).await;
-    assert_eq!((p["status"].as_str(), p["assignee"].as_str()), (Some("in_review"), Some("bob")));
-    let (_, p) = a.patch(&format!("/v1/cases/{cid}"), json!({"assignee": ""})).await;
+    let (_, p) = a
+        .patch(&format!("/v1/cases/{cid}"), json!({"assignee": "bob"}))
+        .await;
+    assert_eq!(
+        (p["status"].as_str(), p["assignee"].as_str()),
+        (Some("in_review"), Some("bob"))
+    );
+    let (_, p) = a
+        .patch(&format!("/v1/cases/{cid}"), json!({"assignee": ""}))
+        .await;
     assert_eq!(p["assignee"], Value::Null, "empty string unassigns");
-    let (_, p) = a.patch(&format!("/v1/cases/{cid}"), json!({"assignee": "cy"})).await;
+    let (_, p) = a
+        .patch(&format!("/v1/cases/{cid}"), json!({"assignee": "cy"}))
+        .await;
     assert_eq!(p["assignee"], "cy");
-    let (_, p) = a.patch(&format!("/v1/cases/{cid}"), json!({"assignee": null})).await;
+    let (_, p) = a
+        .patch(&format!("/v1/cases/{cid}"), json!({"assignee": null}))
+        .await;
     assert_eq!(p["assignee"], Value::Null, "null unassigns");
-    assert_eq!(a.patch(&format!("/v1/cases/{cid}"), json!({"status": "done"})).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        a.patch(&format!("/v1/cases/{cid}"), json!({"status": "done"}))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
     let missing = "/v1/cases/00000000-0000-4000-8000-000000000000";
-    assert_eq!(a.patch(missing, json!({"status": "closed"})).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(
+        a.patch(missing, json!({"status": "closed"})).await.0,
+        StatusCode::NOT_FOUND
+    );
 
     let (s, d) = a.get(&format!("/v1/cases/{cid}")).await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(d["id"], cid.as_str());
     assert_eq!(d["alert_ids"], json!([al1, al2]));
-    let alert_ids: Vec<&Value> = d["alerts"].as_array().unwrap().iter().map(|x| &x["id"]).collect();
+    let alert_ids: Vec<&Value> = d["alerts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| &x["id"])
+        .collect();
     assert_eq!(alert_ids, [&json!(al1), &json!(al2)]);
     assert_eq!(d["notes"], json!([n]));
 
@@ -275,8 +404,17 @@ async fn cases_and_notes(pool: PgPool) {
     assert_eq!(list["total"], 2);
     assert_eq!(list["items"][0]["title"], "Empty", "newest first");
     assert_eq!(a.get("/v1/cases?status=in_review").await.1["total"], 1);
-    assert_eq!(a.get("/v1/cases?status=open&limit=1").await.1["items"].as_array().unwrap().len(), 1);
-    assert_eq!(a.get("/v1/cases?status=nope").await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        a.get("/v1/cases?status=open&limit=1").await.1["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        a.get("/v1/cases?status=nope").await.0,
+        StatusCode::BAD_REQUEST
+    );
 }
 
 async fn audit_verify_and_tamper(pool: PgPool) {
@@ -285,18 +423,41 @@ async fn audit_verify_and_tamper(pool: PgPool) {
     assert_eq!(v, json!({"ok": true, "entries": 0, "broken_at": null}));
 
     let al = make_alert(&a, "u").await; // 3 txn.scored + 1 alert.created
-    a.post(&format!("/v1/alerts/{al}/disposition"), json!({"label": "true_positive", "analyst": "ann"})).await;
-    let (_, c) = a.post("/v1/cases", json!({"title": "t", "alert_ids": [al]})).await;
+    a.post(
+        &format!("/v1/alerts/{al}/disposition"),
+        json!({"label": "true_positive", "analyst": "ann"}),
+    )
+    .await;
+    let (_, c) = a
+        .post("/v1/cases", json!({"title": "t", "alert_ids": [al]}))
+        .await;
     let cid = c["id"].as_str().unwrap();
-    a.patch(&format!("/v1/cases/{cid}"), json!({"status": "closed"})).await;
-    a.post(&format!("/v1/cases/{cid}/notes"), json!({"author": "ann", "body": "b"})).await;
+    a.patch(&format!("/v1/cases/{cid}"), json!({"status": "closed"}))
+        .await;
+    a.post(
+        &format!("/v1/cases/{cid}/notes"),
+        json!({"author": "ann", "body": "b"}),
+    )
+    .await;
 
     let (_, v) = a.get("/v1/audit/verify").await;
     assert_eq!(v, json!({"ok": true, "entries": 8, "broken_at": null}));
-    let actions: Vec<String> = sqlx::query_scalar("SELECT action FROM audit_log ORDER BY seq").fetch_all(&pool).await.unwrap();
+    let actions: Vec<String> = sqlx::query_scalar("SELECT action FROM audit_log ORDER BY seq")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
     assert_eq!(
         actions,
-        ["txn.scored", "txn.scored", "txn.scored", "alert.created", "alert.disposition", "case.created", "case.updated", "case.note"]
+        [
+            "txn.scored",
+            "txn.scored",
+            "txn.scored",
+            "alert.created",
+            "alert.disposition",
+            "case.created",
+            "case.updated",
+            "case.note"
+        ]
     );
 
     // Concurrent appends keep the chain linear.
@@ -305,9 +466,15 @@ async fn audit_verify_and_tamper(pool: PgPool) {
     for (s, _) in futures_util::future::join_all(reqs).await {
         assert_eq!(s, StatusCode::OK);
     }
-    assert_eq!(a.get("/v1/audit/verify").await.1, json!({"ok": true, "entries": 16, "broken_at": null}));
+    assert_eq!(
+        a.get("/v1/audit/verify").await.1,
+        json!({"ok": true, "entries": 16, "broken_at": null})
+    );
 
-    let seq: i64 = sqlx::query_scalar("SELECT seq FROM audit_log ORDER BY seq OFFSET 4 LIMIT 1").fetch_one(&pool).await.unwrap();
+    let seq: i64 = sqlx::query_scalar("SELECT seq FROM audit_log ORDER BY seq OFFSET 4 LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     sqlx::query("UPDATE audit_log SET payload = jsonb_set(payload, '{label}', '\"false_positive\"') WHERE seq = $1")
         .bind(seq)
         .execute(&pool)
@@ -322,20 +489,35 @@ async fn restart_rebuild(pool: PgPool) {
     {
         let a = TestApp::new(pool.clone()).await;
         for leg in [&l1, &l2] {
-            assert_eq!(a.post("/v1/score", leg.clone()).await.1["decision"], "allow");
+            assert_eq!(
+                a.post("/v1/score", leg.clone()).await.1["decision"],
+                "allow"
+            );
         }
         // Out-of-window history must not be replayed.
-        a.post("/v1/score", txn("old", "o-a", "o-b", T0 - 100 * H, 1_000)).await;
+        a.post("/v1/score", txn("old", "o-a", "o-b", T0 - 100 * H, 1_000))
+            .await;
     } // engine actor dropped here = "process restart"
 
     let a = TestApp::new(pool).await;
     let (_, stats) = a.get("/v1/stats").await;
-    assert_eq!(stats["processed"], 2, "rebuild replays only the last window: {stats}");
-    assert_eq!(stats["watermark_ms"], T0 + 2 * H, "watermark = last replayed leg");
+    assert_eq!(
+        stats["processed"], 2,
+        "rebuild replays only the last window: {stats}"
+    );
+    assert_eq!(
+        stats["watermark_ms"],
+        T0 + 2 * H,
+        "watermark = last replayed leg"
+    );
     let (s, v) = a.post("/v1/score", l3).await;
     assert_eq!(s, StatusCode::OK);
     assert_ne!(v["decision"], "allow", "cycle detected after restart: {v}");
-    assert!(v["findings"].as_array().unwrap().iter().any(|f| f["rule"] == "cycle"));
+    assert!(v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f["rule"] == "cycle"));
     assert!(v["alert_id"].is_string());
 }
 
@@ -349,7 +531,11 @@ async fn ops_endpoints(pool: PgPool) {
     }
     let (s, text) = a.raw("/metrics").await;
     assert_eq!(s, StatusCode::OK);
-    for m in ["aegis_txns_total", "aegis_alerts_total{decision=", "aegis_score_latency_us_bucket"] {
+    for m in [
+        "aegis_txns_total",
+        "aegis_alerts_total{decision=",
+        "aegis_score_latency_us_bucket",
+    ] {
         assert!(text.contains(m), "{m} missing from /metrics:\n{text}");
     }
 }
@@ -379,11 +565,17 @@ async fn make_alert(a: &TestApp, p: &str) -> String {
     for leg in cycle(p) {
         last = a.post("/v1/score", leg).await.1;
     }
-    last["alert_id"].as_str().unwrap_or_else(|| panic!("no alert: {last}")).to_string()
+    last["alert_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no alert: {last}"))
+        .to_string()
 }
 
 async fn count(pool: &PgPool, table: &str) -> i64 {
-    sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {table}"))).fetch_one(pool).await.unwrap()
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {table}")))
+        .fetch_one(pool)
+        .await
+        .unwrap()
 }
 
 struct TestApp {
@@ -399,25 +591,41 @@ impl TestApp {
             cors_origin: None,
             engine: aegis_core::Config::default(),
         };
-        Self { router: app(AppState::with_pool(pool, &cfg).await.unwrap()) }
+        Self {
+            router: app(AppState::with_pool(pool, &cfg).await.unwrap()),
+        }
     }
 
     async fn send(&self, req: Request<Body>) -> (StatusCode, Value) {
         let res = self.router.clone().oneshot(req).await.unwrap();
         let status = res.status();
         let bytes = res.into_body().collect().await.unwrap().to_bytes();
-        (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
     }
 
     async fn raw(&self, uri: &str) -> (StatusCode, String) {
-        let res = self.router.clone().oneshot(Request::get(uri).body(Body::empty()).unwrap()).await.unwrap();
+        let res = self
+            .router
+            .clone()
+            .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
         let status = res.status();
         let bytes = res.into_body().collect().await.unwrap().to_bytes();
         (status, String::from_utf8(bytes.to_vec()).unwrap())
     }
 
     async fn get(&self, uri: &str) -> (StatusCode, Value) {
-        self.send(Request::get(uri).header("authorization", format!("Bearer {KEY}")).body(Body::empty()).unwrap()).await
+        self.send(
+            Request::get(uri)
+                .header("authorization", format!("Bearer {KEY}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
     }
 
     async fn post(&self, uri: &str, body: Value) -> (StatusCode, Value) {
@@ -455,6 +663,11 @@ async fn postgres() -> (Option<postgresql_embedded::PostgreSQL>, String) {
 async fn fresh_db(base: &PgConnectOptions, scenario: &str) -> PgPool {
     let name = format!("aegis_test_{scenario}_{}", uuid::Uuid::new_v4().simple());
     let mut admin = base.connect().await.expect("connect admin db");
-    sqlx::query(sqlx::AssertSqlSafe(format!("CREATE DATABASE {name}"))).execute(&mut admin).await.unwrap();
-    PgPool::connect_with(base.clone().database(&name)).await.unwrap()
+    sqlx::query(sqlx::AssertSqlSafe(format!("CREATE DATABASE {name}")))
+        .execute(&mut admin)
+        .await
+        .unwrap();
+    PgPool::connect_with(base.clone().database(&name))
+        .await
+        .unwrap()
 }

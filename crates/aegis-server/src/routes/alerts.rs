@@ -79,7 +79,10 @@ pub struct ListQuery {
     offset: Option<i64>,
 }
 
-pub async fn list(State(st): State<AppState>, AppQuery(q): AppQuery<ListQuery>) -> ApiResult<Page<AlertSummary>> {
+pub async fn list(
+    State(st): State<AppState>,
+    AppQuery(q): AppQuery<ListQuery>,
+) -> ApiResult<Page<AlertSummary>> {
     one_of("status", &q.status, &["open", "escalated", "closed"])?;
     let (limit, offset) = paging(q.limit, q.offset)?;
     macro_rules! filter {
@@ -95,7 +98,12 @@ pub async fn list(State(st): State<AppState>, AppQuery(q): AppQuery<ListQuery>) 
         .bind(q.min_score)
         .fetch_one(&st.pool)
         .await?;
-    let items = sqlx::query_as(concat!("SELECT ", alert_cols!(), filter!(), " ORDER BY a.seq DESC LIMIT $4 OFFSET $5"))
+    let items = sqlx::query_as(concat!(
+        "SELECT ",
+        alert_cols!(),
+        filter!(),
+        " ORDER BY a.seq DESC LIMIT $4 OFFSET $5"
+    ))
     .bind(&q.status)
     .bind(&q.rule)
     .bind(q.min_score)
@@ -116,10 +124,12 @@ pub async fn get(State(st): State<AppState>, AppPath(id): AppPath<Uuid>) -> ApiR
     .fetch_optional(&st.pool)
     .await?
     .ok_or_else(|| alert_not_found(id))?;
-    detail.disposition = sqlx::query_as("SELECT alert_id, label, analyst, note, created_at FROM dispositions WHERE alert_id = $1")
-        .bind(id)
-        .fetch_optional(&st.pool)
-        .await?;
+    detail.disposition = sqlx::query_as(
+        "SELECT alert_id, label, analyst, note, created_at FROM dispositions WHERE alert_id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&st.pool)
+    .await?;
     Ok(Json(detail))
 }
 
@@ -146,7 +156,10 @@ pub async fn subgraph(
             .fetch_optional(&st.pool)
             .await?
             .ok_or_else(|| alert_not_found(id))?;
-    let engine_graphs = st.engine.subgraphs(vec![debtor, creditor], hops, MAX_SUBGRAPH_EDGES).await?;
+    let engine_graphs = st
+        .engine
+        .subgraphs(vec![debtor, creditor], hops, MAX_SUBGRAPH_EDGES)
+        .await?;
 
     let mut seen = HashSet::new();
     let mut edges: Vec<PathEdge> = Vec::new();
@@ -163,18 +176,26 @@ pub async fn subgraph(
 
     // Nodes: engine nodes first (they carry the hub flag), then any path endpoint the
     // engine no longer knows; only nodes touched by a kept edge (or a lone root).
-    let endpoints: HashSet<&str> = edges.iter().flat_map(|e| [e.from.as_str(), e.to.as_str()]).collect();
+    let endpoints: HashSet<&str> = edges
+        .iter()
+        .flat_map(|e| [e.from.as_str(), e.to.as_str()])
+        .collect();
     let mut node_ids = HashSet::new();
     let mut nodes: Vec<SubNode> = Vec::new();
     for n in engine_graphs.iter().flat_map(|g| &g.nodes) {
-        if (endpoints.contains(n.id.as_str()) || edges.is_empty()) && node_ids.insert(n.id.clone()) {
+        if (endpoints.contains(n.id.as_str()) || edges.is_empty()) && node_ids.insert(n.id.clone())
+        {
             nodes.push(n.clone());
         }
     }
     for e in &edges {
         for id in [&e.from, &e.to] {
             if node_ids.insert(id.clone()) {
-                nodes.push(SubNode { id: id.clone(), kind: node_kind(id), hub: false });
+                nodes.push(SubNode {
+                    id: id.clone(),
+                    kind: node_kind(id),
+                    hub: false,
+                });
             }
         }
     }
@@ -233,9 +254,16 @@ pub async fn disposition(
     .fetch_optional(&mut *db)
     .await?
     .ok_or_else(|| AppError::conflict(format!("alert {id} already has a disposition")))?;
-    sqlx::query("UPDATE alerts SET status = 'closed' WHERE id = $1").bind(id).execute(&mut *db).await?;
+    sqlx::query("UPDATE alerts SET status = 'closed' WHERE id = $1")
+        .bind(id)
+        .execute(&mut *db)
+        .await?;
     let payload = json!({ "alert_id": id, "label": d.label, "analyst": d.analyst, "note": d.note });
-    audit::append(&mut db, vec![Entry::new(&req.analyst, "alert.disposition", id, payload)]).await?;
+    audit::append(
+        &mut db,
+        vec![Entry::new(&req.analyst, "alert.disposition", id, payload)],
+    )
+    .await?;
     db.commit().await?;
     Ok(Json(d))
 }

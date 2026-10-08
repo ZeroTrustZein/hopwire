@@ -59,7 +59,10 @@ pub struct CreateReq {
     assignee: Option<String>,
 }
 
-pub async fn create(State(st): State<AppState>, AppJson(req): AppJson<CreateReq>) -> ApiResult<Case> {
+pub async fn create(
+    State(st): State<AppState>,
+    AppJson(req): AppJson<CreateReq>,
+) -> ApiResult<Case> {
     require("title", &req.title)?;
     let mut ids = req.alert_ids.clone();
     ids.sort();
@@ -73,17 +76,22 @@ pub async fn create(State(st): State<AppState>, AppJson(req): AppJson<CreateReq>
         .bind(&assignee)
         .execute(&mut *db)
         .await?;
-    let linked = sqlx::query("UPDATE alerts SET status = 'escalated', case_id = $1 WHERE id = ANY($2)")
-        .bind(id)
-        .bind(&ids)
-        .execute(&mut *db)
-        .await?
-        .rows_affected();
+    let linked =
+        sqlx::query("UPDATE alerts SET status = 'escalated', case_id = $1 WHERE id = ANY($2)")
+            .bind(id)
+            .bind(&ids)
+            .execute(&mut *db)
+            .await?
+            .rows_affected();
     if linked != ids.len() as u64 {
         return Err(AppError::bad_request("one or more alert_ids do not exist"));
     }
     let payload = json!({ "title": req.title, "assignee": assignee, "alert_ids": ids });
-    audit::append(&mut db, vec![Entry::new("api", "case.created", id, payload)]).await?;
+    audit::append(
+        &mut db,
+        vec![Entry::new("api", "case.created", id, payload)],
+    )
+    .await?;
     let case = fetch_case(&mut db, id).await?;
     db.commit().await?;
     Ok(Json(case))
@@ -99,13 +107,17 @@ pub struct ListQuery {
     offset: Option<i64>,
 }
 
-pub async fn list(State(st): State<AppState>, AppQuery(q): AppQuery<ListQuery>) -> ApiResult<Page<Case>> {
+pub async fn list(
+    State(st): State<AppState>,
+    AppQuery(q): AppQuery<ListQuery>,
+) -> ApiResult<Page<Case>> {
     one_of("status", &q.status, STATUSES)?;
     let (limit, offset) = paging(q.limit, q.offset)?;
-    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM cases WHERE ($1::text IS NULL OR status = $1)")
-        .bind(&q.status)
-        .fetch_one(&st.pool)
-        .await?;
+    let total: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM cases WHERE ($1::text IS NULL OR status = $1)")
+            .bind(&q.status)
+            .fetch_one(&st.pool)
+            .await?;
     let items = sqlx::query_as(concat!(
         "SELECT ",
         case_cols!(),
@@ -123,17 +135,25 @@ pub async fn list(State(st): State<AppState>, AppQuery(q): AppQuery<ListQuery>) 
 pub async fn get(State(st): State<AppState>, AppPath(id): AppPath<Uuid>) -> ApiResult<CaseDetail> {
     let mut conn = st.pool.acquire().await?;
     let case = fetch_case(&mut conn, id).await?;
-    let alerts = sqlx::query_as(concat!("SELECT ", alert_cols!(), " FROM alerts a WHERE a.case_id = $1 ORDER BY a.seq"))
-        .bind(id)
-        .fetch_all(&mut *conn)
-        .await?;
+    let alerts = sqlx::query_as(concat!(
+        "SELECT ",
+        alert_cols!(),
+        " FROM alerts a WHERE a.case_id = $1 ORDER BY a.seq"
+    ))
+    .bind(id)
+    .fetch_all(&mut *conn)
+    .await?;
     let notes = sqlx::query_as(
         "SELECT id, case_id, author, body, created_at FROM case_notes WHERE case_id = $1 ORDER BY created_at, id",
     )
     .bind(id)
     .fetch_all(&mut *conn)
     .await?;
-    Ok(Json(CaseDetail { case, alerts, notes }))
+    Ok(Json(CaseDetail {
+        case,
+        alerts,
+        notes,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -179,7 +199,11 @@ pub async fn patch(
     if let Some(a) = &req.assignee {
         payload["assignee"] = json!(a);
     }
-    audit::append(&mut db, vec![Entry::new("api", "case.updated", id, payload)]).await?;
+    audit::append(
+        &mut db,
+        vec![Entry::new("api", "case.updated", id, payload)],
+    )
+    .await?;
     let case = fetch_case(&mut db, id).await?;
     db.commit().await?;
     Ok(Json(case))
@@ -215,17 +239,25 @@ pub async fn add_note(
     .fetch_one(&mut *db)
     .await?;
     let payload = json!({ "case_id": case_id, "author": note.author, "body": note.body });
-    audit::append(&mut db, vec![Entry::new(&req.author, "case.note", note.id, payload)]).await?;
+    audit::append(
+        &mut db,
+        vec![Entry::new(&req.author, "case.note", note.id, payload)],
+    )
+    .await?;
     db.commit().await?;
     Ok(Json(note))
 }
 
 async fn fetch_case(conn: &mut PgConnection, id: Uuid) -> Result<Case, AppError> {
-    sqlx::query_as(concat!("SELECT ", case_cols!(), " FROM cases c WHERE c.id = $1"))
-        .bind(id)
-        .fetch_optional(conn)
-        .await?
-        .ok_or_else(|| case_not_found(id))
+    sqlx::query_as(concat!(
+        "SELECT ",
+        case_cols!(),
+        " FROM cases c WHERE c.id = $1"
+    ))
+    .bind(id)
+    .fetch_optional(conn)
+    .await?
+    .ok_or_else(|| case_not_found(id))
 }
 
 fn case_not_found(id: Uuid) -> AppError {

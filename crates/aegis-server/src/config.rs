@@ -16,7 +16,8 @@ impl ServerConfig {
         let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
         let engine = match var("AEGIS_CONFIG") {
             Some(path) => {
-                let s = std::fs::read_to_string(&path).with_context(|| format!("reading AEGIS_CONFIG {path}"))?;
+                let s = std::fs::read_to_string(&path)
+                    .with_context(|| format!("reading AEGIS_CONFIG {path}"))?;
                 aegis_core::Config::from_toml(&s)?
             }
             None => aegis_core::Config::default(),

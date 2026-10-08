@@ -9,7 +9,11 @@ use crate::actor::EngineHandle;
 
 /// Connect only; migrations run in `AppState::with_pool`.
 pub async fn connect(url: &str) -> Result<PgPool> {
-    PgPoolOptions::new().max_connections(16).connect(url).await.context("connecting to Postgres")
+    PgPoolOptions::new()
+        .max_connections(16)
+        .connect(url)
+        .await
+        .context("connecting to Postgres")
 }
 
 /// Replay the last `window_ms` of transactions (relative to the newest stored
@@ -21,9 +25,11 @@ pub async fn rebuild(pool: &PgPool, engine: &EngineHandle, window_ms: i64) -> Re
     else {
         return Ok(0);
     };
-    let mut rows = sqlx::query_scalar::<_, Json<Txn>>("SELECT raw FROM transactions WHERE ts_ms >= $1 ORDER BY ts_ms, seq")
-        .bind(max_ts.saturating_sub(window_ms))
-        .fetch(pool);
+    let mut rows = sqlx::query_scalar::<_, Json<Txn>>(
+        "SELECT raw FROM transactions WHERE ts_ms >= $1 ORDER BY ts_ms, seq",
+    )
+    .bind(max_ts.saturating_sub(window_ms))
+    .fetch(pool);
 
     const CHUNK: usize = 1_000;
     let (mut n, mut buf) = (0u64, Vec::with_capacity(CHUNK));
@@ -31,7 +37,9 @@ pub async fn rebuild(pool: &PgPool, engine: &EngineHandle, window_ms: i64) -> Re
         buf.push(t);
         if buf.len() == CHUNK {
             n += CHUNK as u64;
-            engine.ingest(std::mem::replace(&mut buf, Vec::with_capacity(CHUNK))).await?;
+            engine
+                .ingest(std::mem::replace(&mut buf, Vec::with_capacity(CHUNK)))
+                .await?;
         }
     }
     n += buf.len() as u64;

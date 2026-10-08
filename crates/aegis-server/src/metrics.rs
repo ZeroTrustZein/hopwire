@@ -10,7 +10,9 @@ pub fn handle() -> PrometheusHandle {
             PrometheusBuilder::new()
                 .set_buckets_for_metric(
                     Matcher::Full("aegis_score_latency_us".into()),
-                    &[10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1_000.0, 2_500.0, 5_000.0, 10_000.0],
+                    &[
+                        10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1_000.0, 2_500.0, 5_000.0, 10_000.0,
+                    ],
                 )
                 .expect("buckets")
                 .install_recorder()

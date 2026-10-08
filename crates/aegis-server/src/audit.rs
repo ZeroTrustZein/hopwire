@@ -23,7 +23,10 @@ pub fn canonical_json(v: &Value) -> String {
                 .collect();
             format!("{{{}}}", body.join(","))
         }
-        Value::Array(a) => format!("[{}]", a.iter().map(canonical_json).collect::<Vec<_>>().join(",")),
+        Value::Array(a) => format!(
+            "[{}]",
+            a.iter().map(canonical_json).collect::<Vec<_>>().join(",")
+        ),
         other => other.to_string(),
     }
 }
@@ -45,8 +48,18 @@ pub struct Entry {
 }
 
 impl Entry {
-    pub fn new(actor: &str, action: &'static str, entity_id: impl ToString, payload: Value) -> Self {
-        Self { actor: actor.into(), action, entity_id: entity_id.to_string(), payload }
+    pub fn new(
+        actor: &str,
+        action: &'static str,
+        entity_id: impl ToString,
+        payload: Value,
+    ) -> Self {
+        Self {
+            actor: actor.into(),
+            action,
+            entity_id: entity_id.to_string(),
+            payload,
+        }
     }
 }
 
@@ -56,11 +69,15 @@ pub async fn append(conn: &mut PgConnection, entries: Vec<Entry>) -> sqlx::Resul
     if entries.is_empty() {
         return Ok(());
     }
-    sqlx::query("SELECT pg_advisory_xact_lock($1)").bind(LOCK_KEY).execute(&mut *conn).await?;
-    let mut prev: String = sqlx::query_scalar("SELECT hash FROM audit_log ORDER BY seq DESC LIMIT 1")
-        .fetch_optional(&mut *conn)
-        .await?
-        .unwrap_or_else(|| GENESIS.into());
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(LOCK_KEY)
+        .execute(&mut *conn)
+        .await?;
+    let mut prev: String =
+        sqlx::query_scalar("SELECT hash FROM audit_log ORDER BY seq DESC LIMIT 1")
+            .fetch_optional(&mut *conn)
+            .await?
+            .unwrap_or_else(|| GENESIS.into());
 
     let n = entries.len();
     let (mut actors, mut actions, mut ids, mut payloads, mut prevs, mut hashes) = (
@@ -114,12 +131,18 @@ pub async fn verify(pool: &PgPool) -> sqlx::Result<Verify> {
     let (mut prev, mut entries, mut broken_at) = (GENESIS.to_string(), 0i64, None);
     while let Some((seq, action, entity_id, payload, prev_hash, h)) = rows.try_next().await? {
         entries += 1;
-        if broken_at.is_none() && (prev_hash != prev || hash(&prev, &payload, &action, &entity_id) != h) {
+        if broken_at.is_none()
+            && (prev_hash != prev || hash(&prev, &payload, &action, &entity_id) != h)
+        {
             broken_at = Some(seq);
         }
         prev = h;
     }
-    Ok(Verify { ok: broken_at.is_none(), entries, broken_at })
+    Ok(Verify {
+        ok: broken_at.is_none(),
+        entries,
+        broken_at,
+    })
 }
 
 #[cfg(test)]
@@ -130,7 +153,40 @@ mod tests {
     #[test]
     fn canonical_sorts_keys_recursively() {
         let v = json!({"z": 1, "a": {"y": [1, {"c": 2, "b": "x"}], "b": null}});
-        assert_eq!(canonical_json(&v), r#"{"a":{"b":null,"y":[1,{"b":"x","c":2}]},"z":1}"#);
+        assert_eq!(
+            canonical_json(&v),
+            r#"{"a":{"b":null,"y":[1,{"b":"x","c":2}]},"z":1}"#
+        );
+    }
+
+    /// Verify re-parses payloads from jsonb text; floats must survive bit-exactly
+    /// or the recomputed hash breaks (regression: 0.9626838184523809 drifted 1 ULP).
+    #[test]
+    fn floats_round_trip_through_text() {
+        for s in [
+            "0.9626838184523809",
+            "0.6807499999999999",
+            "0.9849074074074073",
+            "1e-7",
+            "0.1",
+        ] {
+            let v: Value = serde_json::from_str(s).unwrap();
+            assert_eq!(
+                v.to_string().parse::<f64>().unwrap(),
+                s.parse::<f64>().unwrap(),
+                "{s}"
+            );
+            assert_eq!(
+                serde_json::from_str::<Value>(&v.to_string()).unwrap(),
+                v,
+                "{s}"
+            );
+            assert_eq!(
+                v.as_f64().unwrap(),
+                s.parse::<f64>().unwrap(),
+                "{s} parsed inexactly"
+            );
+        }
     }
 
     #[test]
