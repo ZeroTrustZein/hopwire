@@ -2,7 +2,7 @@ mod common;
 
 use std::time::Instant;
 
-use aegis_core::{EdgeKind, Engine, Rule};
+use aegis_core::{Config, EdgeKind, Engine, Rule};
 use common::*;
 
 /// Run a ring `a0 -> a1 -> ... -> a{n-1} -> a0`, one minute apart; return the closing verdict.
@@ -451,4 +451,96 @@ fn disabled_detectors_emit_nothing() {
     let v = ring(&mut e, 3);
     assert!(v.findings.is_empty());
     assert_eq!(v.score, 0.0);
+}
+
+// --- Precision guards: everyday behaviour that must NOT alert --------------------
+
+/// Employer pays the same 40 staff monthly. Month 1 is new (may alert); month 2,
+/// with counterparty memory surviving the 72h window, must be silent.
+#[test]
+fn recurring_payroll_is_silent_after_first_run() {
+    let mut e = Engine::new(Config::default());
+    let staff = 40;
+    let run = |e: &mut Engine, month: i64| {
+        (0..staff)
+            .map(|s| {
+                let mut t = tx(
+                    &format!("p{month}-{s}"),
+                    month * 30 * DAY + s * MIN,
+                    250_000,
+                    "employer",
+                    &format!("staff{s}"),
+                );
+                t.scheme = aegis_core::Scheme::Bacs;
+                e.process(&t)
+            })
+            .collect::<Vec<_>>()
+    };
+    run(&mut e, 0);
+    let second = run(&mut e, 1);
+    assert!(
+        second
+            .iter()
+            .all(|v| v.decision == aegis_core::Decision::Allow),
+        "{:#?}",
+        second
+            .iter()
+            .find(|v| v.decision != aegis_core::Decision::Allow)
+    );
+}
+
+/// First-time scatter to 12 never-seen payees still alerts.
+#[test]
+fn first_time_scatter_alerts() {
+    let mut e = Engine::new(only(Rule::FanOut));
+    let mut last = None;
+    for i in 0..12 {
+        last = Some(e.process(&tx(
+            &format!("s{i}"),
+            i * MIN,
+            90_000,
+            "mule",
+            &format!("drop{i}"),
+        )));
+    }
+    assert!(has(&last.unwrap(), Rule::FanOut));
+}
+
+/// Salary from a known employer spent on payday is not pass-through layering;
+/// the same flow from a stranger is.
+#[test]
+fn pass_through_ignores_known_payers() {
+    let cfg = only(Rule::PassThrough);
+    let mut e = Engine::new(cfg.clone());
+    e.process(&tx("m1", 0, 300_000, "employer", "alice")); // establishes employer
+    e.process(&tx("m2", 30 * DAY, 300_000, "employer", "alice"));
+    let v = e.process(&tx(
+        "spend",
+        30 * DAY + 10 * MIN,
+        290_000,
+        "alice",
+        "landlord",
+    ));
+    assert!(!has(&v, Rule::PassThrough), "{v:#?}");
+
+    let mut e = Engine::new(cfg);
+    e.process(&tx("in", 0, 300_000, "stranger", "mule"));
+    let v = e.process(&tx("out", 10 * MIN, 290_000, "mule", "exit"));
+    assert!(has(&v, Rule::PassThrough));
+}
+
+/// A->B->A repayment between established friends scores below review on its own;
+/// a fresh near-full round trip still reaches review.
+#[test]
+fn two_hop_reciprocity_damped_unless_fresh_round_trip() {
+    let cfg = only(Rule::Cycle);
+    let mut e = Engine::new(cfg.clone());
+    e.process(&tx("old", 0, 5_000, "bob", "ann")); // bob has paid ann before
+    e.process(&tx("lend", 10 * DAY, 50_000, "ann", "bob"));
+    let v = e.process(&tx("repay", 11 * DAY, 30_000, "bob", "ann"));
+    assert!(v.score < cfg.bands.review, "{v:#?}");
+
+    let mut e = Engine::new(cfg.clone());
+    let v = ring(&mut e, 2);
+    assert!(v.score >= cfg.bands.review, "{v:#?}");
 }

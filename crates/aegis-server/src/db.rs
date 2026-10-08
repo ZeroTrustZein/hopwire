@@ -16,9 +16,9 @@ pub async fn connect(url: &str) -> Result<PgPool> {
         .context("connecting to Postgres")
 }
 
-/// Replay the last `window_ms` of transactions (relative to the newest stored
+/// Replay the last `history_ms` of transactions (relative to the newest stored
 /// `ts_ms`) through `Engine::ingest`, in `ts_ms` then insertion order. Returns rows replayed.
-pub async fn rebuild(pool: &PgPool, engine: &EngineHandle, window_ms: i64) -> Result<u64> {
+pub async fn rebuild(pool: &PgPool, engine: &EngineHandle, history_ms: i64) -> Result<u64> {
     let Some(max_ts) = sqlx::query_scalar::<_, Option<i64>>("SELECT max(ts_ms) FROM transactions")
         .fetch_one(pool)
         .await?
@@ -28,7 +28,7 @@ pub async fn rebuild(pool: &PgPool, engine: &EngineHandle, window_ms: i64) -> Re
     let mut rows = sqlx::query_scalar::<_, Json<Txn>>(
         "SELECT raw FROM transactions WHERE ts_ms >= $1 ORDER BY ts_ms, seq",
     )
-    .bind(max_ts.saturating_sub(window_ms))
+    .bind(max_ts.saturating_sub(history_ms))
     .fetch(pool);
 
     const CHUNK: usize = 1_000;

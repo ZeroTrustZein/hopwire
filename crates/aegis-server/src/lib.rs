@@ -41,7 +41,12 @@ impl AppState {
     pub async fn with_pool(pool: PgPool, cfg: &ServerConfig) -> Result<Self> {
         sqlx::migrate!("./migrations").run(&pool).await?;
         let engine = actor::EngineHandle::spawn(cfg.engine.clone());
-        let replayed = db::rebuild(&pool, &engine, cfg.engine.window_ms).await?;
+        let replayed = db::rebuild(
+            &pool,
+            &engine,
+            cfg.engine.history_ms.max(cfg.engine.window_ms),
+        )
+        .await?;
         tracing::info!(replayed, "engine state rebuilt from Postgres");
         Ok(Self {
             pool,

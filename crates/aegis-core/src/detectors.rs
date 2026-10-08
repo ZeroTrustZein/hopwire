@@ -202,7 +202,19 @@ fn cycle_finding_from(g: &Graph, edges: &[(u32, PaymentEdge)], txn: &Txn, cfg: &
     let (lo, hi) = amounts.fold((i64::MAX, i64::MIN), |(lo, hi), a| (lo.min(a), hi.max(a)));
     let retention = lo as f64 / hi.max(1) as f64;
     let speed = 1.0 - (span as f64 / cfg.cycle.max_span_ms.max(1) as f64).clamp(0.0, 1.0);
-    let score = 0.5 + 0.3 * retention + 0.2 * speed;
+    let mut score = 0.5 + 0.3 * retention + 0.2 * speed;
+    // A->B->A is everyday reciprocity (loan repaid, bill split) unless it is a near-full
+    // round trip of fresh counterparties. Layering needs intermediaries: 3+ hops score in full.
+    if hops == 2 {
+        let (v, e) = &edges[0];
+        let fresh = g
+            .node(*v)
+            .known_payees
+            .is_new(e.peer, txn.ts_ms - cfg.window_ms);
+        if !(retention >= 0.9 && fresh) {
+            score *= 0.5;
+        }
+    }
     let mut path: Vec<PathEdge> = edges.iter().map(|(f, e)| g.pay_edge(*f, e)).collect();
     path.push(txn_edge(txn));
     let reason = format!(
@@ -285,13 +297,18 @@ pub fn fan_in(g: &Graph, u: u32, v: u32, txn: &Txn, cfg: &Config) -> Option<Find
 /// - fires when `outflow >= min_ratio * inflow`.
 ///
 /// Path = the inflow edges (newest first, capped) followed by this outflow.
-pub fn pass_through(g: &Graph, u: u32, _v: u32, txn: &Txn, cfg: &Config) -> Option<Finding> {
+pub fn pass_through(g: &Graph, u: u32, v: u32, txn: &Txn, cfg: &Config) -> Option<Finding> {
     let c = &cfg.pass_through;
     if !c.enabled {
         return None;
     }
     let node = g.node(u);
-    let ins: Vec<_> = window(&node.inc, txn.ts_ms - c.within_ms, txn.ts_ms).collect();
+    // Only money from payers new within the graph window counts: salary from a known
+    // employer spent on payday is not layering; funds from strangers moved on are.
+    let novel_since = txn.ts_ms - cfg.window_ms;
+    let ins: Vec<_> = window(&node.inc, txn.ts_ms - c.within_ms, txn.ts_ms)
+        .filter(|e| node.known_payers.is_new(e.peer, novel_since))
+        .collect();
     let inflow: i64 = ins.iter().map(|e| e.amount).sum();
     if inflow < c.min_inflow_minor.max(1) {
         return None;
@@ -311,7 +328,10 @@ pub fn pass_through(g: &Graph, u: u32, _v: u32, txn: &Txn, cfg: &Config) -> Opti
     let delay = txn.ts_ms - ins[0].ts;
     let speed = 1.0 - (delay as f64 / c.within_ms.max(1) as f64).clamp(0.0, 1.0);
     let fullness = ((ratio - c.min_ratio) / (1.0 - c.min_ratio).max(1e-6)).clamp(0.0, 1.0);
-    let score = 0.6 + 0.25 * fullness + 0.15 * speed;
+    let mut score = 0.6 + 0.25 * fullness + 0.15 * speed;
+    if !node.known_payees.is_new(v, novel_since) {
+        score *= 0.5; // onward payee is an established counterparty
+    }
     let mut path: Vec<_> = ins
         .iter()
         .take(PATH_CAP - 1)

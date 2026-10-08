@@ -21,13 +21,24 @@ struct Typo {
     rules: BTreeMap<Rule, u64>,
 }
 
+/// Txns earlier than `first_ts + warmup_ms` are ingested (history backfill, as a bank
+/// would do at go-live) but neither scored nor counted in any metric.
 pub fn run(
     cfg: Config,
     dataset: &str,
     items: impl Iterator<Item = (Txn, Option<Label>)>,
     report: &Path,
+    warmup_ms: i64,
 ) -> Res<()> {
     let mut eng = Engine::new(cfg.clone());
+    let mut items = items.peekable();
+    let mut warmed = 0u64;
+    if let Some(start) = items.peek().map(|(t, _)| t.ts_ms) {
+        while let Some((t, _)) = items.next_if(|(t, _)| t.ts_ms < start + warmup_ms) {
+            eng.ingest(&t);
+            warmed += 1;
+        }
+    }
     let mut hist = Histogram::<u64>::new_with_bounds(1, 60_000_000_000, 3)?; // ns
     let (mut n, mut flagged, mut tp, mut laundering, mut review, mut block) =
         (0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
@@ -113,7 +124,14 @@ pub fn run(
     writeln!(w, "| | |\n|---|---|")?;
     writeln!(w, "| Date | {} |", today_utc())?;
     writeln!(w, "| Dataset | {dataset} |")?;
-    writeln!(w, "| Transactions | {n} over {span_days:.1} days |")?;
+    writeln!(w, "| Transactions | {n} scored over {span_days:.1} days |")?;
+    if warmed > 0 {
+        writeln!(
+            w,
+            "| Warm-up | {warmed} earlier txns ({:.0} days) ingested as history, not scored |",
+            warmup_ms as f64 / 86_400_000.0
+        )?;
+    }
     writeln!(
         w,
         "| Engine | aegis-core {} (in-process, single thread) |",

@@ -18,6 +18,10 @@ pub enum ConfigError {
 pub struct Config {
     /// Edges older than `watermark - window_ms` are evicted.
     pub window_ms: i64,
+    /// How much history to replay on restart (>= `window_ms`). Edges beyond `window_ms`
+    /// are evicted again, but counterparty memory (known payees/payers) survives, so a
+    /// restart does not forget a monthly payroll. Should cover the longest pay cycle.
+    pub history_ms: i64,
     /// In+out degree (within window) at which a node is tagged HUB and no longer expanded.
     pub hub_degree: u32,
     pub cycle: CycleCfg,
@@ -115,6 +119,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             window_ms: 72 * HOUR,
+            history_ms: 35 * DAY,
             hub_degree: 500,
             cycle: CycleCfg::default(),
             fan_in: FanInCfg::default(),

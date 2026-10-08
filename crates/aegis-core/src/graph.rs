@@ -130,31 +130,35 @@ fn evict_front<E: Timed + Copy>(
     n
 }
 
-/// Bounded LRU/FIFO record of known counterparties per account.
+/// Bounded record of known counterparties per account: peer -> (first seen, last seen).
 /// Outlives the 72-hour sliding window so repeat counterparties (payroll staff,
 /// regular bills, standing orders) are not flagged as new.
+///
+/// When full, the least-recently-paid half is dropped in one O(n) pass (amortised
+/// O(1) per insert). Recurring payees keep refreshing `last` and survive; one-offs
+/// age out. FIFO eviction would do the opposite and churn a large payroll forever.
 #[derive(Debug, Default)]
 pub struct KnownPayees {
-    pub(crate) map: hashbrown::HashMap<u32, i64>,
-    order: VecDeque<u32>,
+    pub(crate) map: hashbrown::HashMap<u32, (i64, i64)>,
 }
 
 // Covers normal employers and recurring billers while bounding per-account memory.
-const KNOWN_PAYEES_CAP: usize = 4096;
+pub(crate) const KNOWN_PAYEES_CAP: usize = 16_384;
 
 impl KnownPayees {
-    /// Record a payment to `peer` at `ts`. If already known, keeps original timestamp.
+    /// Record a payment to `peer` at `ts`; keeps the original first-seen time.
     pub fn record(&mut self, peer: u32, ts: i64) {
-        if self.map.contains_key(&peer) {
+        if let Some((_, last)) = self.map.get_mut(&peer) {
+            *last = (*last).max(ts);
             return;
         }
-        if self.order.len() >= KNOWN_PAYEES_CAP {
-            if let Some(old) = self.order.pop_front() {
-                self.map.remove(&old);
-            }
+        if self.map.len() >= KNOWN_PAYEES_CAP {
+            let mut lasts: Vec<i64> = self.map.values().map(|v| v.1).collect();
+            let mid = lasts.len() / 2;
+            let cutoff = *lasts.select_nth_unstable(mid).1;
+            self.map.retain(|_, v| v.1 > cutoff);
         }
-        self.order.push_back(peer);
-        self.map.insert(peer, ts);
+        self.map.insert(peer, (ts, ts));
     }
 
     /// Whether `peer` is in the retained known set (retention outlives graph window).
@@ -166,7 +170,7 @@ impl KnownPayees {
     pub fn is_new(&self, peer: u32, cutoff: i64) -> bool {
         self.map
             .get(&peer)
-            .is_none_or(|&first_seen| first_seen >= cutoff)
+            .is_none_or(|&(first_seen, _)| first_seen >= cutoff)
     }
 }
 
@@ -482,6 +486,32 @@ impl Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn known_payees_keep_recurring_and_evict_stale() {
+        let mut k = KnownPayees::default();
+        // Payroll of 1000 staff paid every month; then a flood of one-off payees
+        // larger than the cap. Staff must survive, the earliest one-offs must not.
+        let payroll = 0..1000u32;
+        let one_offs = 1_000_000..1_000_000 + KNOWN_PAYEES_CAP as u32;
+        let mut ts = 0;
+        for (i, p) in one_offs.clone().enumerate() {
+            if i % 1000 == 0 {
+                ts += 1;
+                payroll.clone().for_each(|s| k.record(s, ts));
+            }
+            ts += 1;
+            k.record(p, ts);
+        }
+        assert!(k.map.len() <= KNOWN_PAYEES_CAP);
+        assert!(
+            payroll.clone().all(|s| k.has_seen(s)),
+            "recurring payees evicted"
+        );
+        assert!(!k.has_seen(one_offs.start), "stalest one-off kept");
+        assert!(k.has_seen(one_offs.end - 1), "newest one-off evicted");
+        assert!(!k.is_new(0, 2), "first-seen time must not move on repeat");
+    }
 
     #[test]
     fn eviction_frees_tx_ids_and_edges() {

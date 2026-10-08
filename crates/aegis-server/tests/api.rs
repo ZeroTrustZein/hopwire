@@ -494,16 +494,19 @@ async fn restart_rebuild(pool: PgPool) {
                 "allow"
             );
         }
-        // Out-of-window history must not be replayed.
-        a.post("/v1/score", txn("old", "o-a", "o-b", T0 - 100 * H, 1_000))
-            .await;
+        // History older than history_ms (35d) must not be replayed.
+        a.post(
+            "/v1/score",
+            txn("old", "o-a", "o-b", T0 - 40 * 24 * H, 1_000),
+        )
+        .await;
     } // engine actor dropped here = "process restart"
 
     let a = TestApp::new(pool).await;
     let (_, stats) = a.get("/v1/stats").await;
     assert_eq!(
         stats["processed"], 2,
-        "rebuild replays only the last window: {stats}"
+        "rebuild replays only history_ms: {stats}"
     );
     assert_eq!(
         stats["watermark_ms"],

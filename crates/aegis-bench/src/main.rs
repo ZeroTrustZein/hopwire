@@ -35,6 +35,15 @@ struct RunOpts {
     /// Markdown report output.
     #[arg(long, default_value = "bench/report.md")]
     report: PathBuf,
+    /// Days of leading history ingested without scoring (go-live backfill); excluded from metrics.
+    #[arg(long, default_value_t = 0)]
+    warmup_days: u32,
+}
+
+impl RunOpts {
+    fn warmup_ms(&self) -> i64 {
+        i64::from(self.warmup_days) * 86_400_000
+    }
 }
 
 #[derive(Subcommand)]
@@ -122,7 +131,13 @@ fn main() -> Res<()> {
                     let ds = format!(
                         "synthetic (accounts={accounts}, days={days}, seed={seed}, rings_per_type={rings_per_type})"
                     );
-                    run::run(load_config(&run.config)?, &ds, gen, &run.report)
+                    run::run(
+                        load_config(&run.config)?,
+                        &ds,
+                        gen,
+                        &run.report,
+                        run.warmup_ms(),
+                    )
                 }
             }
         }
@@ -137,7 +152,13 @@ fn main() -> Res<()> {
             let stream = ibm::IbmStream::open(&trans, pats, reorder)?;
             let ds = format!("IBM AML {}", trans.display());
             let items = stream.take(limit.unwrap_or(u64::MAX) as usize);
-            run::run(load_config(&run.config)?, &ds, items, &run.report)
+            run::run(
+                load_config(&run.config)?,
+                &ds,
+                items,
+                &run.report,
+                run.warmup_ms(),
+            )
         }
         Cmd::Run { input, labels, run } => {
             let labels = labels
@@ -153,6 +174,7 @@ fn main() -> Res<()> {
                 &input.display().to_string(),
                 items,
                 &run.report,
+                run.warmup_ms(),
             )
         }
         Cmd::Replay {

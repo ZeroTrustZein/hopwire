@@ -4,6 +4,10 @@
 
 # Sliding window: edges older than (latest txn timestamp - window_ms) are evicted. 72h.
 window_ms = 259200000
+# History replayed on restart (ms). Edges older than window_ms are evicted again, but
+# counterparty memory (known payees/payers) survives, so a restart does not forget a
+# monthly payroll. Cover the longest pay cycle. 35d.
+history_ms = 3024000000
 # In+out degree within the window at which a node is a HUB. Hubs can start or end
 # a cycle path but are never traversed through (keeps searches bounded).
 hub_degree = 500
