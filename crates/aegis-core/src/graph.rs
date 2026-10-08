@@ -130,6 +130,46 @@ fn evict_front<E: Timed + Copy>(
     n
 }
 
+/// Bounded LRU/FIFO record of known counterparties per account.
+/// Outlives the 72-hour sliding window so repeat counterparties (payroll staff,
+/// regular bills, standing orders) are not flagged as new.
+#[derive(Debug, Default)]
+pub struct KnownPayees {
+    pub(crate) map: hashbrown::HashMap<u32, i64>,
+    order: VecDeque<u32>,
+}
+
+// Covers normal employers and recurring billers while bounding per-account memory.
+const KNOWN_PAYEES_CAP: usize = 4096;
+
+impl KnownPayees {
+    /// Record a payment to `peer` at `ts`. If already known, keeps original timestamp.
+    pub fn record(&mut self, peer: u32, ts: i64) {
+        if self.map.contains_key(&peer) {
+            return;
+        }
+        if self.order.len() >= KNOWN_PAYEES_CAP {
+            if let Some(old) = self.order.pop_front() {
+                self.map.remove(&old);
+            }
+        }
+        self.order.push_back(peer);
+        self.map.insert(peer, ts);
+    }
+
+    /// Whether `peer` is in the retained known set (retention outlives graph window).
+    pub fn has_seen(&self, peer: u32) -> bool {
+        self.map.contains_key(&peer)
+    }
+
+    /// Whether `peer` was first observed during the current scoring window.
+    pub fn is_new(&self, peer: u32, cutoff: i64) -> bool {
+        self.map
+            .get(&peer)
+            .is_none_or(|&first_seen| first_seen >= cutoff)
+    }
+}
+
 #[derive(Debug)]
 pub struct Node {
     pub id: Box<str>,
@@ -140,6 +180,10 @@ pub struct Node {
     pub uses_in: VecDeque<UsesEdge>,
     /// Account opening time, if ever reported.
     pub opened_at_ms: Option<i64>,
+    /// Payees this account has sent payments to.
+    pub known_payees: KnownPayees,
+    /// Payers this account has received payments from.
+    pub known_payers: KnownPayees,
 }
 
 impl Node {
@@ -152,6 +196,8 @@ impl Node {
             uses_out: VecDeque::new(),
             uses_in: VecDeque::new(),
             opened_at_ms: None,
+            known_payees: KnownPayees::default(),
+            known_payers: KnownPayees::default(),
         }
     }
 

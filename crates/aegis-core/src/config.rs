@@ -51,6 +51,8 @@ pub struct FanInCfg {
     pub min_senders: u32,
     /// Accounts opened within this period get a score boost.
     pub young_account_ms: i64,
+    /// Established accounts need at least this many new payers in the window.
+    pub min_new_senders: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -73,6 +75,8 @@ pub struct FanOutCfg {
     pub weight: f64,
     pub window_ms: i64,
     pub min_payees: u32,
+    /// Payees opened within this period boost the fan-out score.
+    pub young_payee_ms: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -85,6 +89,8 @@ pub struct VelocityCfg {
     pub max_count: u32,
     /// Outgoing sum per account per window (minor units).
     pub max_sum_minor: i64,
+    /// Payees opened within this period count toward velocity. Unknown opening dates count too.
+    pub young_payee_ms: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -123,43 +129,82 @@ impl Default for Config {
 
 impl Default for CycleCfg {
     fn default() -> Self {
-        Self { enabled: true, weight: 0.9, max_hops: 4, budget: 2_000, max_span_ms: 72 * HOUR }
+        Self {
+            enabled: true,
+            weight: 0.9,
+            max_hops: 4,
+            budget: 2_000,
+            max_span_ms: 72 * HOUR,
+        }
     }
 }
 
 impl Default for FanInCfg {
     fn default() -> Self {
-        Self { enabled: true, weight: 0.6, window_ms: 24 * HOUR, min_senders: 8, young_account_ms: 30 * DAY }
+        Self {
+            enabled: true,
+            weight: 0.58,
+            window_ms: 24 * HOUR,
+            min_senders: 6,
+            young_account_ms: 30 * DAY,
+            min_new_senders: 6,
+        }
     }
 }
 
 impl Default for PassThroughCfg {
     fn default() -> Self {
-        Self { enabled: true, weight: 0.7, within_ms: 60 * MIN, min_ratio: 0.8, min_inflow_minor: 10_000 }
+        Self {
+            enabled: true,
+            weight: 0.7,
+            within_ms: 60 * MIN,
+            min_ratio: 0.8,
+            min_inflow_minor: 10_000,
+        }
     }
 }
 
 impl Default for FanOutCfg {
     fn default() -> Self {
-        Self { enabled: true, weight: 0.5, window_ms: 24 * HOUR, min_payees: 10 }
+        Self {
+            enabled: true,
+            weight: 0.6,
+            window_ms: 24 * HOUR,
+            min_payees: 10,
+            young_payee_ms: 30 * DAY,
+        }
     }
 }
 
 impl Default for VelocityCfg {
     fn default() -> Self {
-        Self { enabled: true, weight: 0.4, window_ms: HOUR, max_count: 20, max_sum_minor: 5_000_000 }
+        Self {
+            enabled: true,
+            weight: 0.7,
+            window_ms: HOUR,
+            max_count: 15,
+            max_sum_minor: 50_000_000,
+            young_payee_ms: 30 * DAY,
+        }
     }
 }
 
 impl Default for SharedIdCfg {
     fn default() -> Self {
-        Self { enabled: true, weight: 0.5, min_accounts: 4 }
+        Self {
+            enabled: true,
+            weight: 0.85,
+            min_accounts: 4,
+        }
     }
 }
 
 impl Default for Bands {
     fn default() -> Self {
-        Self { review: 0.5, block: 0.85 }
+        Self {
+            review: 0.5,
+            block: 0.85,
+        }
     }
 }
 

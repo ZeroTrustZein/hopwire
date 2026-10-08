@@ -103,7 +103,8 @@ async fn record(db: &mut PgConnection, txns: &[Txn], verdicts: &[Verdict]) -> Re
             }
         }
         let decision = enum_str(&v.decision);
-        let summary = json!({ "tx_id": t.tx_id, "score": v.score, "decision": decision, "rules": rules });
+        let score_rounded = (v.score * 10_000.0).round() / 10_000.0;
+        let summary = json!({ "tx_id": t.tx_id, "score": score_rounded, "decision": decision, "rules": rules });
         audit_rows.push(Entry::new("api", "txn.scored", &t.tx_id, summary.clone()));
         if v.decision == Decision::Allow {
             ids.push(None);

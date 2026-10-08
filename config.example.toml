@@ -27,12 +27,16 @@ budget = 2000
 max_span_ms = 259200000
 
 # Mule collection account: creditor paid by many distinct senders.
+# Card merchant fan-in is excluded; established non-card accounts also need a
+# young-account or new-sender signal before this rule fires.
 [fan_in]
 enabled = true
-weight = 0.6
+weight = 0.58
 # 24h.
 window_ms = 86400000
-min_senders = 8
+min_senders = 6
+# Established accounts require at least this many new payers in the window.
+min_new_senders = 6
 # Creditor accounts opened within this period before the txn score higher. 30d.
 young_account_ms = 2592000000
 
@@ -52,24 +56,28 @@ min_inflow_minor = 10000
 # Scatter: debtor pays many distinct payees.
 [fan_out]
 enabled = true
-weight = 0.5
+weight = 0.6
 # 24h.
 window_ms = 86400000
 min_payees = 10
+# Payees opened within this period boost score. 30d.
+young_payee_ms = 2592000000
 
 # Debtor outgoing count or value per window above limits.
 [velocity]
 enabled = true
-weight = 0.4
+weight = 0.7
 # 1h.
 window_ms = 3600000
 # Fires when count > max_count ...
-max_count = 20
-# ... or sum > max_sum_minor (50,000.00).
-max_sum_minor = 5000000
+max_count = 15
+# ... or sum > max_sum_minor (500,000.00).
+max_sum_minor = 50000000
+# Payee novelty is retained in a bounded per-account set; this field is reserved for future calibration.
+young_payee_ms = 2592000000
 
 # Device / IP / customer identity linked to many accounts within window_ms.
 [shared_id]
 enabled = true
-weight = 0.5
+weight = 0.85
 min_accounts = 4

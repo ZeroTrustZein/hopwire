@@ -18,7 +18,7 @@ Latency = wall time of one `Engine::process()` call (ingest + all detectors).
 
 | Engine TPS | Wall TPS (incl. data gen/parse) | p50 µs | p90 µs | p99 µs | p99.9 µs | max µs | mean µs |
 |---|---|---|---|---|---|---|---|
-| 129220 | 109621 | 7.6 | 10.6 | 15.8 | 62.8 | 6176.8 | 7.7 |
+| 407524 | 319164 | 1.7 | 3.0 | 21.2 | 38.9 | 3477.5 | 2.5 |
 
 Final graph: 99305 nodes, 313798 edges, 66 hubs (window 72 h).
 
@@ -28,7 +28,7 @@ Flagged = decision `review` or `block`.
 
 | Laundering txns | Flagged | Review | Block | Alert rate | Precision (flagged laundering / flagged) | Txn recall |
 |---|---|---|---|---|---|---|
-| 6868 | 115165 | 7196 | 107969 | 4.5% | 2.9% | 47.9% |
+| 6868 | 55031 | 54119 | 912 | 2.1% | 8.6% | 68.8% |
 
 ### Recall by typology
 
@@ -37,23 +37,23 @@ Attempt recall: an attempt counts as caught if any of its txns is flagged. Rules
 | Typology | Attempts | Attempt recall | Txns | Txn recall | Rules fired |
 |---|---|---|---|---|---|
 | CYCLE | 50 | 100.0% | 156 | 41.0% | cycle:50, pass_through:26 |
-| FAN-IN | 50 | 100.0% | 1054 | 57.6% | mule_fan_in:804, pass_through:3 |
-| FAN-OUT | 50 | 74.0% | 1049 | 22.9% | fan_out:599 |
-| PASS-THROUGH | 50 | 100.0% | 141 | 35.5% | pass_through:50 |
-| SCATTER-GATHER | 50 | 100.0% | 1154 | 37.3% | mule_fan_in:327, pass_through:348, fan_out:135 |
+| FAN-IN | 50 | 100.0% | 1054 | 61.5% | mule_fan_in:804, pass_through:3, fan_out:78 |
+| FAN-OUT | 50 | 100.0% | 1049 | 57.1% | fan_out:599 |
+| PASS-THROUGH | 50 | 100.0% | 141 | 44.0% | pass_through:50, fan_out:12 |
+| SCATTER-GATHER | 50 | 100.0% | 1154 | 49.0% | mule_fan_in:327, pass_through:348, fan_out:135 |
 | SHARED-DEVICE | 50 | 96.0% | 1064 | 68.4% | cycle:36, pass_through:13, shared_identifier:852 |
-| VELOCITY | 50 | 100.0% | 2250 | 52.0% | fan_out:122, velocity:1504 |
+| VELOCITY | 50 | 100.0% | 2250 | 91.4% | fan_out:2056, velocity:1503 |
 
 ### Rule hits
 
 | Rule | Txns with finding | On laundering txns | On flagged txns |
 |---|---|---|---|
-| cycle | 837 | 86 | 809 |
-| mule_fan_in | 2099635 | 1131 | 2341 |
-| pass_through | 1502 | 440 | 1490 |
-| fan_out | 111193 | 856 | 109976 |
-| velocity | 111039 | 1504 | 110705 |
-| shared_identifier | 1428 | 852 | 1204 |
+| cycle | 837 | 86 | 811 |
+| mule_fan_in | 20403 | 1131 | 1064 |
+| pass_through | 1502 | 440 | 1460 |
+| fan_out | 51767 | 2880 | 51444 |
+| velocity | 49709 | 1503 | 49709 |
+| shared_identifier | 1428 | 852 | 726 |
 
 ## Config
 
@@ -74,6 +74,7 @@ weight = 0.58
 window_ms = 86400000
 min_senders = 6
 young_account_ms = 2592000000
+min_new_senders = 6
 
 [pass_through]
 enabled = true
@@ -87,6 +88,7 @@ enabled = true
 weight = 0.6
 window_ms = 86400000
 min_payees = 10
+young_payee_ms = 2592000000
 
 [velocity]
 enabled = true
@@ -94,6 +96,7 @@ weight = 0.7
 window_ms = 3600000
 max_count = 15
 max_sum_minor = 50000000
+young_payee_ms = 2592000000
 
 [shared_id]
 enabled = true

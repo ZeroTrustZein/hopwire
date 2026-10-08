@@ -11,7 +11,7 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::config::Config;
 use crate::graph::{lower_bound, Graph, PaymentEdge, UsesEdge};
-use crate::types::{EdgeKind, Finding, PathEdge, Rule, Txn};
+use crate::types::{EdgeKind, Finding, PathEdge, Rule, Scheme, Txn};
 
 /// Max edges examined per window scan.
 pub const SCAN_CAP: usize = 1024;
@@ -225,10 +225,14 @@ fn cycle_finding_from(g: &Graph, edges: &[(u32, PaymentEdge)], txn: &Txn, cfg: &
 // ---------------------------------------------------------------------------
 
 /// Creditor received from >= `min_senders` distinct senders within `fan_in.window_ms`
-/// (this txn included). +0.15 if the creditor account is younger than `young_account_ms`.
+/// (this txn included). A finding requires either a young account or a previously unseen
+/// sender; this suppresses established merchant/card collection accounts.
 pub fn fan_in(g: &Graph, u: u32, v: u32, txn: &Txn, cfg: &Config) -> Option<Finding> {
     let c = &cfg.fan_in;
-    if !c.enabled || g.node(v).inc.len() + 1 < c.min_senders as usize {
+    // Card merchant aggregation is expected high fan-in; reserve this rule for
+    // account-to-account rails where a collection pattern is meaningful.
+    if !c.enabled || txn.scheme == Scheme::Card || g.node(v).inc.len() + 1 < c.min_senders as usize
+    {
         return None;
     }
     let edges: Vec<_> = window(&g.node(v).inc, txn.ts_ms - c.window_ms, txn.ts_ms).collect();
@@ -237,11 +241,19 @@ pub fn fan_in(g: &Graph, u: u32, v: u32, txn: &Txn, cfg: &Config) -> Option<Find
     if n < c.min_senders {
         return None;
     }
-    let total: i64 = edges.iter().map(|e| e.amount).sum::<i64>() + txn.amount_minor;
     let opened = txn.creditor_account_opened_at_ms.or(g.node(v).opened_at_ms);
     let age = opened
         .map(|o| txn.ts_ms - o)
         .filter(|a| (0..=c.young_account_ms).contains(a));
+    let new_senders = edges
+        .iter()
+        .filter(|e| !g.node(v).known_payers.has_seen(e.peer))
+        .count() as u32
+        + u32::from(!g.node(v).known_payers.has_seen(u));
+    if age.is_none() && new_senders < c.min_new_senders {
+        return None;
+    }
+    let total: i64 = edges.iter().map(|e| e.amount).sum::<i64>() + txn.amount_minor;
     let score = (ramp(n, c.min_senders, 0.85) + if age.is_some() { 0.15 } else { 0.0 }).min(1.0);
     let mut path = vec![txn_edge(txn)];
     path.extend(edges.iter().take(PATH_CAP - 1).map(|e| g.pay_edge_in(v, e)));
@@ -273,7 +285,7 @@ pub fn fan_in(g: &Graph, u: u32, v: u32, txn: &Txn, cfg: &Config) -> Option<Find
 /// - fires when `outflow >= min_ratio * inflow`.
 ///
 /// Path = the inflow edges (newest first, capped) followed by this outflow.
-pub fn pass_through(g: &Graph, u: u32, txn: &Txn, cfg: &Config) -> Option<Finding> {
+pub fn pass_through(g: &Graph, u: u32, _v: u32, txn: &Txn, cfg: &Config) -> Option<Finding> {
     let c = &cfg.pass_through;
     if !c.enabled {
         return None;
@@ -285,8 +297,11 @@ pub fn pass_through(g: &Graph, u: u32, txn: &Txn, cfg: &Config) -> Option<Findin
         return None;
     }
     let first_in = ins.last()?.ts;
+    // Attribute only outgoing payments after actual inflow; unrelated earlier outflow
+    // in the lookback window must not inflate pass-through ratio.
     let outflow = txn.amount_minor
         + window(&node.out, first_in, txn.ts_ms)
+            .filter(|e| e.ts >= first_in)
             .map(|e| e.amount)
             .sum::<i64>();
     let ratio = outflow as f64 / inflow as f64;
@@ -324,31 +339,88 @@ pub fn pass_through(g: &Graph, u: u32, txn: &Txn, cfg: &Config) -> Option<Findin
 // FanOut
 // ---------------------------------------------------------------------------
 
-/// Debtor paid >= `min_payees` distinct payees within `fan_out.window_ms` (this txn included).
+/// Debtor paid >= `min_payees` distinct *new* payees within `fan_out.window_ms`.
+/// Payees opened within `young_payee_ms` boost the score by 0.15, allowing smaller
+/// newly created scatter rings to alert.
 pub fn fan_out(g: &Graph, u: u32, v: u32, txn: &Txn, cfg: &Config) -> Option<Finding> {
     let c = &cfg.fan_out;
     if !c.enabled || g.node(u).out.len() + 1 < c.min_payees as usize {
         return None;
     }
     let edges: Vec<_> = window(&g.node(u).out, txn.ts_ms - c.window_ms, txn.ts_ms).collect();
-    let payees: HashSet<u32> = edges.iter().map(|e| e.peer).chain([v]).collect();
-    let n = payees.len() as u32;
-    if n < c.min_payees {
+    let known = &g.node(u).known_payees;
+    // Lifetime novelty suppresses recurring payroll after first run; young payees
+    // affect score only, never eligibility, so mixed scatter rings remain detectable.
+    let mut new_payees: HashSet<u32> = edges
+        .iter()
+        .filter(|e| known.is_new(e.peer, txn.ts_ms - c.window_ms))
+        .map(|e| e.peer)
+        .collect();
+    if known.is_new(v, txn.ts_ms - c.window_ms) {
+        new_payees.insert(v);
+    }
+    let n = new_payees.len() as u32;
+    let young_precheck = new_payees
+        .iter()
+        .filter(|&&p| {
+            g.node(p)
+                .opened_at_ms
+                .is_some_and(|o| (0..=c.young_payee_ms).contains(&(txn.ts_ms - o)))
+        })
+        .count();
+    // Young/new recipient clusters are stronger than the generic threshold. This
+    // catches compact laundering scatters without reopening recurring payroll.
+    if n < c.min_payees && young_precheck < 1 {
         return None;
     }
-    let total: i64 = edges.iter().map(|e| e.amount).sum::<i64>() + txn.amount_minor;
-    let mut path = vec![txn_edge(txn)];
-    path.extend(edges.iter().take(PATH_CAP - 1).map(|e| g.pay_edge(u, e)));
+    let total: i64 = edges
+        .iter()
+        .filter(|e| new_payees.contains(&e.peer))
+        .map(|e| e.amount)
+        .sum::<i64>()
+        + if new_payees.contains(&v) {
+            txn.amount_minor
+        } else {
+            0
+        };
+    let mut path = Vec::new();
+    if new_payees.contains(&v) {
+        path.push(txn_edge(txn));
+    }
+    path.extend(
+        edges
+            .iter()
+            .filter(|e| new_payees.contains(&e.peer))
+            .take(PATH_CAP - path.len())
+            .map(|e| g.pay_edge(u, e)),
+    );
+    let young_count = new_payees
+        .iter()
+        .filter(|&&p| {
+            g.node(p)
+                .opened_at_ms
+                .is_some_and(|o| (0..=c.young_payee_ms).contains(&(txn.ts_ms - o)))
+        })
+        .count();
+    let never_seen_count = new_payees.iter().filter(|&&p| !known.has_seen(p)).count();
+    let score = (ramp(n, c.min_payees, 0.95)
+        + if young_count > 0 || never_seen_count >= c.min_payees as usize {
+            0.45
+        } else {
+            -0.15
+        })
+    .clamp(0.0, 1.0);
     let reason = format!(
-        "{} paid {} to {}{n} distinct payees within {}.",
+        "{} paid {} to {}{n} new payees ({} recently opened) within {}.",
         txn.debtor,
         fmt_amt(total, &txn.currency),
         at_least(edges.len() == SCAN_CAP),
+        young_count,
         fmt_dur(c.window_ms)
     );
     Some(Finding {
         rule: Rule::FanOut,
-        score: ramp(n, c.min_payees, 0.95),
+        score,
         reason,
         path,
     })
@@ -358,30 +430,49 @@ pub fn fan_out(g: &Graph, u: u32, v: u32, txn: &Txn, cfg: &Config) -> Option<Fin
 // Velocity
 // ---------------------------------------------------------------------------
 
-/// Debtor's outgoing count > `max_count` or sum > `max_sum_minor` within `velocity.window_ms`
-/// (this txn included).
-pub fn velocity(g: &Graph, u: u32, txn: &Txn, cfg: &Config) -> Option<Finding> {
+/// Debtor's outgoing count of new counterparties > `max_count` or new-payee sum >
+/// `max_sum_minor` within `velocity.window_ms` (this txn included).
+pub fn velocity(g: &Graph, u: u32, v: u32, txn: &Txn, cfg: &Config) -> Option<Finding> {
     let c = &cfg.velocity;
     if !c.enabled {
         return None;
     }
     let edges: Vec<_> = window(&g.node(u).out, txn.ts_ms - c.window_ms, txn.ts_ms).collect();
+    let known = &g.node(u).known_payees;
+    let new_edges: Vec<_> = edges
+        .iter()
+        .filter(|e| known.is_new(e.peer, txn.ts_ms - c.window_ms))
+        .collect();
+    let new_current = known.is_new(v, txn.ts_ms - c.window_ms);
+    let new_count = new_edges.len() as u32 + u32::from(new_current);
     let count = edges.len() as u32 + 1;
-    let sum: i64 = edges.iter().map(|e| e.amount).sum::<i64>() + txn.amount_minor;
-    if count <= c.max_count && sum <= c.max_sum_minor {
+    let new_sum: i64 = new_edges.iter().map(|e| e.amount).sum::<i64>()
+        + if new_current { txn.amount_minor } else { 0 };
+    if new_count == 0 {
+        return None;
+    }
+    if new_count <= c.max_count && new_sum <= c.max_sum_minor {
         return None;
     }
     let over = |x: f64, max: f64| (x / max.max(1.0) - 1.0).max(0.0);
-    let severity =
-        over(count as f64, c.max_count as f64).max(over(sum as f64, c.max_sum_minor as f64));
+    let severity = over(new_count as f64, c.max_count as f64)
+        .max(over(new_sum as f64, c.max_sum_minor as f64));
     let score = 0.5 + 0.45 * severity.min(1.0);
-    let mut path = vec![txn_edge(txn)];
-    path.extend(edges.iter().take(PATH_CAP - 1).map(|e| g.pay_edge(u, e)));
+    let mut path = Vec::new();
+    if new_current {
+        path.push(txn_edge(txn));
+    }
+    path.extend(
+        new_edges
+            .iter()
+            .take(PATH_CAP - path.len())
+            .map(|e| g.pay_edge(u, e)),
+    );
     let reason = format!(
-        "{} made {}{count} outgoing payments totalling {} within {} (limits: {} payments or {}).",
+        "{} made {}{count} payments to new payees totalling {} within {} (limits: {} new payees or {}).",
         txn.debtor,
         at_least(edges.len() == SCAN_CAP),
-        fmt_amt(sum, &txn.currency),
+        fmt_amt(new_sum, &txn.currency),
         fmt_dur(c.window_ms),
         c.max_count,
         fmt_amt(c.max_sum_minor, &txn.currency)

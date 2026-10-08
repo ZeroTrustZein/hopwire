@@ -158,8 +158,10 @@ fn cycle_budget_caps_dense_search() {
 
 #[test]
 fn fan_in_positive_and_young_boost() {
-    let mut e = Engine::new(only(Rule::MuleFanIn));
-    for i in 0..7 {
+    let mut cfg = only(Rule::MuleFanIn);
+    cfg.fan_in.min_new_senders = 1;
+    let mut e = Engine::new(cfg);
+    for i in 0..5 {
         let v = e.process(&tx(
             &format!("f{i}"),
             i * MIN,
@@ -174,9 +176,9 @@ fn fan_in_positive_and_young_boost() {
     assert!(!has(&v_old, Rule::MuleFanIn));
     let plain = e.process(&t);
     let f = finding(&plain, Rule::MuleFanIn);
-    assert_eq!(f.path.len(), 8);
+    assert_eq!(f.path.len(), 6);
     assert!(
-        f.reason.contains("8 distinct senders") && f.reason.contains("1600.00 GBP"),
+        f.reason.contains("6 distinct senders") && f.reason.contains("1200.00 GBP"),
         "{}",
         f.reason
     );
@@ -280,7 +282,9 @@ fn pass_through_negative() {
 
 #[test]
 fn fan_out_positive_and_negative() {
-    let mut e = Engine::new(only(Rule::FanOut));
+    let mut cfg = only(Rule::FanOut);
+    cfg.fan_out.min_payees = 10;
+    let mut e = Engine::new(cfg);
     for i in 0..9 {
         assert!(!has(
             &e.process(&tx(
@@ -297,7 +301,50 @@ fn fan_out_positive_and_negative() {
     let f = finding(&v, Rule::FanOut);
     assert_eq!(f.path.len(), 10);
     assert!(
-        f.reason.contains("10 distinct payees") && f.reason.contains("1000.00 GBP"),
+        f.reason.contains("10 new payees") && f.reason.contains("1000.00 GBP"),
+        "{}",
+        f.reason
+    );
+
+    // 30 staff repeated across three monthly payroll runs: historical payees are not novel.
+    let mut e = Engine::new(only(Rule::FanOut));
+    for month in 0..3 {
+        for i in 0..30 {
+            let v = e.process(&tx(
+                &format!("pay-{month}-{i}"),
+                month * 30 * DAY + i,
+                50_000,
+                "employer",
+                &format!("staff{i}"),
+            ));
+            if month >= 1 {
+                assert!(!has(&v, Rule::FanOut));
+            }
+        }
+    }
+
+    // First-time scatter to 12 payees: detected and boosted above the review band.
+    let mut cfg = only(Rule::FanOut);
+    cfg.fan_out.min_payees = 12;
+    let mut e = Engine::new(cfg);
+    for i in 0..11 {
+        assert!(!has(
+            &e.process(&tx(
+                &format!("new{i}"),
+                i,
+                10_000,
+                "scatter",
+                &format!("new{i}")
+            )),
+            Rule::FanOut
+        ));
+    }
+    let mut last = tx("new11", 12, 10_000, "scatter", "new11");
+    last.creditor_account_opened_at_ms = Some(last.ts_ms - DAY);
+    let v = e.process(&last);
+    let f = finding(&v, Rule::FanOut);
+    assert!(
+        f.score >= 0.5 && f.reason.contains("12 new payees"),
         "{}",
         f.reason
     );
@@ -315,27 +362,31 @@ fn fan_out_positive_and_negative() {
 #[test]
 fn velocity_count_sum_and_negative() {
     let mut e = Engine::new(only(Rule::Velocity));
-    for i in 0..20 {
+    for i in 0..15 {
         assert!(!has(
-            &e.process(&tx(&format!("c{i}"), i * MIN, 100, "a", "b")),
+            &e.process(&tx(&format!("c{i}"), i * MIN, 100, "a", &format!("b{i}"))),
             Rule::Velocity
         ));
     }
     let f = finding(
-        &e.process(&tx("c20", 21 * MIN, 100, "a", "b")),
+        &e.process(&tx("c15", 16 * MIN, 100, "a", "b15")),
         Rule::Velocity,
     )
     .clone();
-    assert!(f.reason.contains("21 outgoing payments"), "{}", f.reason);
+    assert!(
+        f.reason.contains("16 payments to new payees"),
+        "{}",
+        f.reason
+    );
 
     let mut e = Engine::new(only(Rule::Velocity));
-    e.process(&tx("s1", 0, 3_000_000, "a", "b"));
+    e.process(&tx("s1", 0, 30_000_000, "a", "b"));
     let f = finding(
-        &e.process(&tx("s2", MIN, 3_000_000, "a", "c")),
+        &e.process(&tx("s2", MIN, 30_000_000, "a", "c")),
         Rule::Velocity,
     )
     .clone();
-    assert!(f.reason.contains("60000.00 GBP"), "{}", f.reason);
+    assert!(f.reason.contains("600000.00 GBP"), "{}", f.reason);
 
     // 21 txns spread over 21 hours (window 1h): fine.
     let mut e = Engine::new(only(Rule::Velocity));

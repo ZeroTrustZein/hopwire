@@ -58,9 +58,9 @@ impl Engine {
         let mut findings: Vec<Finding> = [
             d::cycle(g, t.debtor, t.creditor, txn, cfg),
             d::fan_in(g, t.debtor, t.creditor, txn, cfg),
-            d::pass_through(g, t.debtor, txn, cfg),
+            d::pass_through(g, t.debtor, t.creditor, txn, cfg),
             d::fan_out(g, t.debtor, t.creditor, txn, cfg),
-            d::velocity(g, t.debtor, txn, cfg),
+            d::velocity(g, t.debtor, t.creditor, txn, cfg),
             d::shared_id(g, &t.links, txn, cfg),
         ]
         .into_iter()
@@ -133,6 +133,12 @@ impl Engine {
         let g = &mut self.graph;
         let tx = g.txs.alloc(&txn.tx_id, 2 * (1 + t.links.len() as u32));
         g.add_payment(t.debtor, t.creditor, txn.ts_ms, txn.amount_minor, tx);
+        g.node_mut(t.debtor)
+            .known_payees
+            .record(t.creditor, txn.ts_ms);
+        g.node_mut(t.creditor)
+            .known_payers
+            .record(t.debtor, txn.ts_ms);
         for &(acct, ident) in &t.links {
             g.add_uses(acct, ident, txn.ts_ms, tx);
         }
