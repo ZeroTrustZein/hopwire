@@ -280,16 +280,17 @@ pub async fn generate_sar(
     State(st): State<AppState>,
     AppPath(id): AppPath<Uuid>,
 ) -> ApiResult<SarExportResponse> {
-    let row: Option<(Jsonb<Txn>, Jsonb<Vec<aegis_core::Finding>>)> = sqlx::query_as(
-        "SELECT t.raw, a.findings FROM alerts a JOIN transactions t ON a.tx_id = t.tx_id WHERE a.id = $1"
+    let row: Option<(Jsonb<Txn>, Jsonb<Vec<aegis_core::Finding>>, f64)> = sqlx::query_as(
+        "SELECT t.raw, a.findings, a.score FROM alerts a JOIN transactions t ON a.tx_id = t.tx_id WHERE a.id = $1"
     )
     .bind(id)
     .fetch_optional(&st.pool)
     .await?;
 
-    let (Jsonb(txn), Jsonb(findings)) = row.ok_or_else(|| alert_not_found(id))?;
+    let (Jsonb(txn), Jsonb(findings), score) = row.ok_or_else(|| alert_not_found(id))?;
 
-    let narrative = aegis_ee::sar::synthesize_narrative(&txn, &findings, "AegisGraph Pilot Bank");
+    let narrative =
+        aegis_ee::sar::synthesize_narrative(&txn, &findings, score, "AegisGraph Pilot Bank");
 
     let fincen_data = aegis_ee::sar::fincen::FinCenSarData {
         filing_institution: "AegisGraph Pilot Bank".into(),

@@ -25,10 +25,10 @@ pub struct GeneratedSarNarrative {
 pub fn synthesize_narrative(
     txn: &Txn,
     findings: &[Finding],
+    combined_score: f64,
     reporting_institution: &str,
 ) -> GeneratedSarNarrative {
     let top_rule = findings.first().map(|f| f.rule).unwrap_or(Rule::Cycle);
-    let top_score = findings.first().map(|f| f.score).unwrap_or(0.85);
 
     let typology_label = match top_rule {
         Rule::Cycle => "Cyclic Layering & Circular Fund Routing",
@@ -62,7 +62,7 @@ pub fn synthesize_narrative(
         txn.tx_id,
         formatted_amt,
         txn.currency,
-        top_score
+        combined_score
     );
 
     let suspect_breakdown = format!(

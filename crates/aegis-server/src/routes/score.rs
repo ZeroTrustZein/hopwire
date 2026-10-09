@@ -32,8 +32,8 @@ pub struct ScoreResponse {
 
 #[derive(Serialize)]
 pub struct BatchResponse {
-    accepted: usize,
-    alerts: usize,
+    pub accepted: usize,
+    pub alerts: usize,
 }
 
 pub async fn score(
@@ -148,6 +148,10 @@ pub async fn batch(
     State(st): State<AppState>,
     AppJson(txns): AppJson<Vec<Txn>>,
 ) -> ApiResult<BatchResponse> {
+    Ok(Json(ingest_batch(&st, txns).await?))
+}
+
+pub async fn ingest_batch(st: &AppState, txns: Vec<Txn>) -> Result<BatchResponse, AppError> {
     if txns.len() > MAX_BATCH {
         return Err(AppError::bad_request(format!(
             "batch exceeds {MAX_BATCH} transactions"
@@ -172,10 +176,10 @@ pub async fn batch(
         .count();
     db.commit().await?;
     observe(&verdicts);
-    Ok(Json(BatchResponse {
+    Ok(BatchResponse {
         accepted: txns.len(),
         alerts,
-    }))
+    })
 }
 
 fn validate(t: &Txn) -> Result<(), AppError> {

@@ -57,15 +57,9 @@ impl Pacs008Txn {
             _ => Scheme::Other,
         };
 
-        let debtor_hash = self
-            .debtor_name
-            .as_ref()
-            .map(|nm| format!("cust:{}", hex_sha256(nm.trim())));
+        let debtor_hash = self.debtor_name.as_ref().map(|nm| hex_sha256(nm.trim()));
 
-        let creditor_hash = self
-            .creditor_name
-            .as_ref()
-            .map(|nm| format!("cust:{}", hex_sha256(nm.trim())));
+        let creditor_hash = self.creditor_name.as_ref().map(|nm| hex_sha256(nm.trim()));
 
         Txn {
             tx_id,
@@ -316,6 +310,21 @@ fn parse_amount_to_minor(s: &str) -> Result<i64, IsoError> {
     }
 }
 
+pub fn xml_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 /// Generate an ISO 20022 `pacs.002.001.10` Payment Status Report XML message
 /// based on the AegisGraph real-time pre-clearance decision.
 pub fn generate_pacs002(
@@ -338,8 +347,11 @@ pub fn generate_pacs002(
         &orig_tx_id[..orig_tx_id.len().min(8)]
     );
 
+    let esc_msg_id = xml_escape(orig_msg_id);
+    let esc_tx_id = xml_escape(orig_tx_id);
+    let esc_reason = xml_escape(reason);
     let uetr_elem = orig_uetr
-        .map(|u| format!("<UETR>{}</UETR>", u))
+        .map(|u| format!("<UETR>{}</UETR>", xml_escape(u)))
         .unwrap_or_default();
 
     format!(
@@ -352,16 +364,16 @@ pub fn generate_pacs002(
     </GrpHdr>
     <TxInfAndSts>
       <OrgnlGrpInf>
-        <OrgnlMsgId>{orig_msg_id}</OrgnlMsgId>
+        <OrgnlMsgId>{esc_msg_id}</OrgnlMsgId>
       </OrgnlGrpInf>
-      <OrgnlEndToEndId>{orig_tx_id}</OrgnlEndToEndId>
+      <OrgnlEndToEndId>{esc_tx_id}</OrgnlEndToEndId>
       {uetr_elem}
       <TxSts>{tx_status}</TxSts>
       <StsRsnInf>
         <Rsn>
           <Cd>{rsn_code}</Cd>
         </Rsn>
-        <AddtlInf>{reason}</AddtlInf>
+        <AddtlInf>{esc_reason}</AddtlInf>
       </StsRsnInf>
     </TxInfAndSts>
   </FIToFIPmtStsRpt>

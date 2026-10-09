@@ -2,6 +2,21 @@
 
 use serde::{Deserialize, Serialize};
 
+fn xml_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoAmlParty {
     pub client_number: String,
@@ -48,7 +63,13 @@ pub fn generate_goaml_xml(data: &UkFiuSarData) -> String {
       <comments>{}</comments>
     </transaction>
 "#,
-            t.tx_id, t.date, amt, t.currency, t.from_account, t.to_account, t.description
+            xml_escape(&t.tx_id),
+            xml_escape(&t.date),
+            amt,
+            xml_escape(&t.currency),
+            xml_escape(&t.from_account),
+            xml_escape(&t.to_account),
+            xml_escape(&t.description)
         ));
     }
 
@@ -63,7 +84,11 @@ pub fn generate_goaml_xml(data: &UkFiuSarData) -> String {
       <institution_name>{}</institution_name>
     </party>
 "#,
-            p.client_number, p.name, p.role, p.account_number, p.institution_name
+            xml_escape(&p.client_number),
+            xml_escape(&p.name),
+            xml_escape(&p.role),
+            xml_escape(&p.account_number),
+            xml_escape(&p.institution_name)
         ));
     }
 
@@ -86,10 +111,10 @@ pub fn generate_goaml_xml(data: &UkFiuSarData) -> String {
   <transactions>
 {}  </transactions>
 </report>"#,
-        data.reporting_entity,
+        xml_escape(&data.reporting_entity),
         chrono::Utc::now().to_rfc3339(),
         data.reason_for_suspicion,
-        data.action_taken,
+        xml_escape(&data.action_taken),
         parties_xml,
         txs_xml
     )

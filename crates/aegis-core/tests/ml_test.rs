@@ -17,7 +17,7 @@ mod tests {
         let t1 = Txn {
             tx_id: "tx-ml-1".into(),
             ts_ms: 1_700_000_000_000,
-            amount_minor: 50_000_00,
+            amount_minor: 5_000_000,
             currency: "GBP".into(),
             debtor: "acc-mule-1".into(),
             creditor: "acc-mule-2".into(),

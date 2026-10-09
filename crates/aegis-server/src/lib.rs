@@ -41,6 +41,24 @@ impl AppState {
     pub async fn with_pool(pool: PgPool, cfg: &ServerConfig) -> Result<Self> {
         sqlx::migrate!("./migrations").run(&pool).await?;
         let engine = actor::EngineHandle::spawn(cfg.engine.clone());
+
+        #[cfg(feature = "onnx")]
+        {
+            let model_path = std::env::var("AEGIS_TGN_MODEL")
+                .unwrap_or_else(|_| "ml/models/tgn_scoring.onnx".into());
+            if std::path::Path::new(&model_path).exists() {
+                match aegis_core::ml::tgn::TgnScorer::load(&model_path, 0.40, 0.85) {
+                    Ok(scorer) => {
+                        tracing::info!(path = %model_path, "Loaded Continuous-Time TGN ONNX model into engine");
+                        let _ = engine.set_ml_scorer(Box::new(scorer)).await;
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Failed to load TGN ONNX model; running deterministic rules only");
+                    }
+                }
+            }
+        }
+
         let replayed = db::rebuild(
             &pool,
             &engine,

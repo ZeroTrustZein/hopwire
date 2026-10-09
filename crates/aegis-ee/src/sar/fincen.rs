@@ -2,6 +2,21 @@
 
 use serde::{Deserialize, Serialize};
 
+fn xml_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinCenSubject {
     pub name: String,
@@ -40,15 +55,15 @@ pub fn generate_fincen_xml(data: &FinCenSarData) -> String {
       </Party>
 "#,
             if s.role == "Debtor" { "33" } else { "34" },
-            s.name,
-            s.account_id
+            xml_escape(&s.name),
+            xml_escape(&s.account_id)
         ));
     }
 
     let typologies_xml = data
         .typologies
         .iter()
-        .map(|t| format!("        <SuspiciousActivityClassificationCode>{t}</SuspiciousActivityClassificationCode>"))
+        .map(|t| format!("        <SuspiciousActivityClassificationCode>{}</SuspiciousActivityClassificationCode>", xml_escape(t)))
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -75,9 +90,9 @@ pub fn generate_fincen_xml(data: &FinCenSarData) -> String {
   </Activity>
 </EFilingBatchXML>"#,
         chrono::Utc::now().format("%Y%m%d"),
-        data.bsar_id,
+        xml_escape(&data.bsar_id),
         amount_decimal,
-        data.currency,
+        xml_escape(&data.currency),
         typologies_xml,
         subjects_xml,
         data.narrative

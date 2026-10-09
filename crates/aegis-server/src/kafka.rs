@@ -115,9 +115,12 @@ pub mod consumer {
     }
 
     async fn process_batch(st: &AppState, txns: Vec<Txn>) -> Result<(), AppError> {
-        let db = st.pool.begin().await?;
-        let _verdicts = st.engine.process_batch(txns).await?;
-        db.commit().await?;
+        let resp = crate::routes::score::ingest_batch(st, txns).await?;
+        tracing::debug!(
+            accepted = resp.accepted,
+            alerts = resp.alerts,
+            "Processed Kafka batch"
+        );
         Ok(())
     }
 }

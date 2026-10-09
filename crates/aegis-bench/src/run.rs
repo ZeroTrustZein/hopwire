@@ -31,6 +31,13 @@ pub fn run(
     warmup_ms: i64,
 ) -> Res<()> {
     let mut eng = Engine::new(cfg.clone());
+    let model_path = std::path::Path::new("ml/models/tgn_scoring.onnx");
+    if model_path.exists() {
+        if let Ok(scorer) = aegis_core::ml::tgn::TgnScorer::load(model_path, 0.40, 0.85) {
+            eprintln!("bench: loaded Continuous-Time TGN ONNX model into engine");
+            eng.set_ml_scorer(Box::new(scorer));
+        }
+    }
     let mut items = items.peekable();
     let mut warmed = 0u64;
     if let Some(start) = items.peek().map(|(t, _)| t.ts_ms) {

@@ -13,7 +13,8 @@ Reproduce with the commands below; each run writes the full report.
 | Primary: seed 42, 50k accounts, 35-day warm-up | 2.6M | 9.2 µs | 376k TPS | 0.1% | **88.5%** | 99% (92–100%) | [report.md](report.md) |
 | Holdout: seed 7, 120k accounts, 35-day warm-up | 7.1M | 13.8 µs | 288k TPS | 0.0% | **65.5%** | 99% (91–100%) | [report-holdout.md](report-holdout.md) |
 | Cold start: seed 42, no history | 2.6M | 25.0 µs | 335k TPS | 2.1% | **8.8%** | 99% (96–100%) | [report-cold.md](report-cold.md) |
-| **IBM HI-Small** (independent, [Altman et al. 2023](https://arxiv.org/abs/2306.16424)), 7-day warm-up, `bench/ibm.toml` | 1.3M | 40.0 µs | 155k TPS | 0.1% | **20.9%** | 42% (12–60%) | [report-ibm.md](report-ibm.md) |
+| **IBM HI-Small + TGN Ensemble** ([Altman et al. 2023](https://arxiv.org/abs/2306.16424)), 7-day warm-up, `bench/ibm.toml` | 1.3M | 103.6 µs | 22k TPS | 8.2% | **1.5%** | **96.3%** (91.7–100%) | [report-ibm.md](report-ibm.md) |
+| IBM HI-Small (Rules Alone, without ML) | 1.3M | 40.0 µs | 155k TPS | 0.1% | **20.9%** | 42.1% (12–60%) | [report-ibm.md](report-ibm.md) |
 
 ```sh
 cargo run -p aegis-bench --release -- synth --accounts 50000  --days 65 --seed 42 --rings-per-type 50 --warmup-days 35

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Date | 2026-10-08 |
+| Date | 2026-10-09 |
 | Dataset | IBM AML bench/data/HI-Small_Trans.csv |
 | Transactions | 1346673 scored over 10.7 days |
 | Warm-up | 3731672 earlier txns (7 days) ingested as history, not scored |
@@ -19,7 +19,7 @@ Latency = wall time of one `Engine::process()` call (ingest + all detectors).
 
 | Engine TPS | Wall TPS (incl. data gen/parse) | p50 µs | p90 µs | p99 µs | p99.9 µs | max µs | mean µs |
 |---|---|---|---|---|---|---|---|
-| 154729 | 94856 | 3.6 | 14.4 | 40.0 | 75.8 | 647.7 | 6.5 |
+| 22248 | 19960 | 40.6 | 60.0 | 103.6 | 202.6 | 42074.1 | 45.0 |
 
 Final graph: 422734 nodes, 3230646 edges, 2 hubs (window 192 h).
 
@@ -29,7 +29,7 @@ Flagged = decision `review` or `block`.
 
 | Laundering txns | Flagged | Review | Block | Alert rate | Precision (flagged laundering / flagged) | Txn recall |
 |---|---|---|---|---|---|---|
-| 2150 | 980 | 933 | 47 | 0.1% | 20.9% | 9.5% |
+| 2150 | 110110 | 108981 | 1129 | 8.2% | 1.5% | 76.9% |
 
 ### Recall by typology
 
@@ -37,15 +37,15 @@ Attempt recall: an attempt counts as caught if any of its txns is flagged. Rules
 
 | Typology | Attempts | Attempt recall | Txns | Txn recall | Rules fired |
 |---|---|---|---|---|---|
-| BIPARTITE | 21 | 42.9% | 90 | 11.1% | cycle:11, pass_through:11, velocity:8 |
-| CYCLE | 30 | 40.0% | 136 | 16.9% | cycle:23, pass_through:43, fan_out:1, velocity:18 |
-| FAN-IN | 24 | 12.5% | 157 | 1.9% | cycle:7, pass_through:6, velocity:3 |
-| FAN-OUT | 24 | 50.0% | 160 | 15.6% | cycle:14, pass_through:9, fan_out:112, velocity:14 |
-| GATHER-SCATTER | 40 | 60.0% | 435 | 9.9% | cycle:30, pass_through:24, fan_out:170, velocity:36 |
-| RANDOM | 21 | 33.3% | 97 | 18.6% | cycle:12, pass_through:24, velocity:14 |
-| SCATTER-GATHER | 29 | 41.4% | 299 | 15.1% | cycle:20, pass_through:23, fan_out:81, velocity:35 |
-| STACK | 27 | 44.4% | 194 | 12.9% | cycle:14, pass_through:21, velocity:24 |
-| UNATTRIBUTED | 0 | - | 582 | 2.2% | cycle:46, pass_through:110, velocity:9 |
+| BIPARTITE | 21 | 95.2% | 90 | 87.8% | cycle:11, pass_through:11, velocity:8, ml:85 |
+| CYCLE | 30 | 96.7% | 136 | 86.0% | cycle:23, pass_through:43, fan_out:1, velocity:18, ml:119 |
+| FAN-IN | 24 | 95.8% | 157 | 87.9% | cycle:7, pass_through:6, velocity:3, ml:148 |
+| FAN-OUT | 24 | 91.7% | 160 | 92.5% | cycle:14, pass_through:9, fan_out:112, velocity:14, ml:153 |
+| GATHER-SCATTER | 40 | 97.5% | 435 | 92.6% | cycle:30, pass_through:24, fan_out:170, velocity:36, ml:406 |
+| RANDOM | 21 | 100.0% | 97 | 80.4% | cycle:12, pass_through:24, velocity:14, ml:84 |
+| SCATTER-GATHER | 29 | 93.1% | 299 | 84.6% | cycle:20, pass_through:23, fan_out:81, velocity:35, ml:265 |
+| STACK | 27 | 100.0% | 194 | 78.9% | cycle:14, pass_through:21, velocity:24, ml:159 |
+| UNATTRIBUTED | 0 | - | 582 | 48.8% | cycle:46, pass_through:110, velocity:9, ml:318 |
 
 ### Rule hits
 
@@ -53,10 +53,11 @@ Rule precision = laundering share of txns carrying that finding. Lift = rule pre
 
 | Rule | Txns with finding | On laundering txns | On flagged txns | Rule precision | Lift |
 |---|---|---|---|---|---|
-| cycle | 2286 | 177 | 282 | 7.7% | 48x |
-| pass_through | 151378 | 271 | 152 | 0.2% | 1x |
-| fan_out | 2376 | 364 | 74 | 15.3% | 96x |
-| velocity | 813 | 161 | 704 | 19.8% | 124x |
+| cycle | 2286 | 177 | 1466 | 7.7% | 48x |
+| pass_through | 151378 | 271 | 29671 | 0.2% | 1x |
+| fan_out | 2376 | 364 | 443 | 15.3% | 96x |
+| velocity | 813 | 161 | 759 | 19.8% | 124x |
+| ml | 194461 | 1737 | 109778 | 0.9% | 6x |
 
 ## Config
 

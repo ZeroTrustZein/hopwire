@@ -17,6 +17,7 @@ enum Cmd {
         reply: oneshot::Sender<Vec<Subgraph>>,
     },
     Stats(oneshot::Sender<EngineStats>),
+    SetMlScorer(Box<dyn aegis_core::MlScorer>, oneshot::Sender<()>),
 }
 
 #[derive(Clone)]
@@ -58,6 +59,10 @@ impl EngineHandle {
                         }
                         Cmd::Stats(r) => {
                             let _ = r.send(engine.stats());
+                        }
+                        Cmd::SetMlScorer(scorer, r) => {
+                            engine.set_ml_scorer(scorer);
+                            let _ = r.send(());
                         }
                     }
                 }
@@ -101,6 +106,10 @@ impl EngineHandle {
 
     pub async fn stats(&self) -> Result<EngineStats> {
         self.call(Cmd::Stats).await
+    }
+
+    pub async fn set_ml_scorer(&self, scorer: Box<dyn aegis_core::MlScorer>) -> Result<()> {
+        self.call(|r| Cmd::SetMlScorer(scorer, r)).await
     }
 }
 

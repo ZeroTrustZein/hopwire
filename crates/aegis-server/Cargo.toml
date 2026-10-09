@@ -6,8 +6,9 @@ license-file.workspace = true
 publish.workspace = true
 
 [features]
-default = []
+default = ["onnx"]
 kafka = ["dep:rskafka"]
+onnx = ["aegis-core/onnx"]
 
 [dependencies]
 aegis-core = { path = "../aegis-core" }
