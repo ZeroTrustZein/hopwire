@@ -1,34 +1,34 @@
-# AegisGraph pilot runbook (design partners)
+# Hopwire pilot runbook (design partners)
 
 Audience: the partner's engineering lead (sections 1–4, 9) and fraud-ops / MLRO lead (sections 5–8, 10).
-Goal: in 14 days, replay your own payment history through AegisGraph inside your VPC and measure
+Goal: in 14 days, replay your own payment history through Hopwire inside your VPC and measure
 whether it catches the mule and APP-fraud cases you already know about, at an alert volume your team can work.
 
 ## 1. Prerequisites
 - One Linux VM (or laptop for a dry run) inside your network: 4 vCPU, 16 GB RAM, 50 GB disk is plenty for a pilot.
 - Docker Engine 24+ with the Compose plugin (`docker compose version`).
-- Git access to this repository (or the two images, `aegisgraph/engine` and `aegisgraph/console`, pushed to your registry).
+- Git access to this repository (or the two images, `hopwire/engine` and `hopwire/console`, pushed to your registry).
 - A historical export of payments: ideally 3–6 months, including the transactions behind cases you have already
   confirmed (mule accounts, APP-fraud victims' outbound payments). Keep the list of confirmed-bad `tx_id`s/accounts aside;
   it is the answer key for section 10.
-- Optional (for the replay tool outside Docker): Rust toolchain, `cargo run -p aegis-bench --release -- ...`.
+- Optional (for the replay tool outside Docker): Rust toolchain, `cargo run -p hopwire-bench --release -- ...`.
 
 No outbound internet access is needed at runtime. Images can be built elsewhere and pushed to your internal registry.
 
 ## 2. Ten-minute local bring-up
 ```bash
-git clone <repo> aegisgraph && cd aegisgraph/deploy
+git clone <repo> hopwire && cd hopwire/deploy
 cp .env.example .env
-# Edit .env: set AEGIS_API_KEY and POSTGRES_PASSWORD (e.g. `openssl rand -hex 32` for each)
+# Edit .env: set HOPWIRE_API_KEY and POSTGRES_PASSWORD (e.g. `openssl rand -hex 32` for each)
 docker compose up -d --build
 docker compose ps                         # postgres healthy, engine + console up
 curl -s http://127.0.0.1:8080/healthz     # -> ok
 ```
-Open http://localhost:3000 and log in with the `AEGIS_API_KEY` value.
+Open http://localhost:3000 and log in with the `HOPWIRE_API_KEY` value.
 
 Smoke test: three accounts paying each other in a loop should produce a `cycle` finding on the third payment.
 ```bash
-KEY=<your AEGIS_API_KEY>
+KEY=<your HOPWIRE_API_KEY>
 t=$(($(date +%s) * 1000))
 for p in "A B 1" "B C 2" "C A 3"; do set -- $p
   curl -s -X POST http://127.0.0.1:8080/v1/score \
@@ -72,18 +72,18 @@ Optional fields matter: `device_id`, `ip` and the customer hashes power the shar
 `creditor_account_opened_at_ms` boosts mule detection. Provide what you have.
 
 ### PII: hash before export
-No raw personal data needs to enter AegisGraph. Hash account numbers, IBANs, device IDs, IPs and customer IDs with
+No raw personal data needs to enter Hopwire. Hash account numbers, IBANs, device IDs, IPs and customer IDs with
 **HMAC-SHA256 under a key that only you hold** (a "salt" that is secret and constant for the pilot). Without the key the
 hashes cannot be reversed by dictionary attack; with it, your team can re-identify any account the console flags by
 hashing your own records the same way. Do not hash `tx_id` if you need to look payments up in your core system (or keep
 a mapping). Example mapper, CSV in, JSON Lines out:
 
 ```python
-# map_export.py: python map_export.py export.csv > txns.jsonl   (key in env AEGIS_PILOT_KEY)
+# map_export.py: python map_export.py export.csv > txns.jsonl   (key in env HOPWIRE_PILOT_KEY)
 import csv, hmac, hashlib, json, os, sys
 from datetime import datetime, timezone
 
-KEY = os.environ["AEGIS_PILOT_KEY"].encode()
+KEY = os.environ["HOPWIRE_PILOT_KEY"].encode()
 def h(v):
     return hmac.new(KEY, v.strip().upper().replace(" ", "").encode(), hashlib.sha256).hexdigest() if v else None
 
@@ -121,14 +121,14 @@ and 65–88 % after a 35-day warm-up, at the same recall (see `bench/README.md`)
 The engine image ships the replay tool, so nothing else needs installing:
 ```bash
 cd deploy
-KEY=$(grep '^AEGIS_API_KEY=' .env | cut -d= -f2-)
-docker compose run --rm -v "$PWD/../pilot-data:/data:ro" --entrypoint /usr/local/bin/aegis-bench \
+KEY=$(grep '^HOPWIRE_API_KEY=' .env | cut -d= -f2-)
+docker compose run --rm -v "$PWD/../pilot-data:/data:ro" --entrypoint /usr/local/bin/hopwire-bench \
   engine replay --target http://engine:8080 --api-key "$KEY" --input /data/txns.jsonl
 ```
-(Or from a machine with Rust: `cargo run -p aegis-bench --release -- replay --target http://127.0.0.1:8080 --api-key ... --input txns.jsonl`.)
+(Or from a machine with Rust: `cargo run -p hopwire-bench --release -- replay --target http://127.0.0.1:8080 --api-key ... --input txns.jsonl`.)
 
 The tool posts batches to `POST /v1/transactions`, which scores every payment through the same code path as live
-`POST /v1/score` and persists alerts. Run `aegis-bench replay --help` for batching options and the exact input format.
+`POST /v1/score` and persists alerts. Run `hopwire-bench replay --help` for batching options and the exact input format.
 Without the tool, any script that POSTs JSON arrays of up to 10 000 `Txn` objects (in order) to `/v1/transactions`
 works the same way.
 
@@ -139,7 +139,7 @@ and replay again, so each run starts from an empty graph.
 Copy the defaults, point Compose at the copy, restart the engine:
 ```bash
 cp ../config.example.toml config.toml
-echo 'AEGIS_CONFIG_FILE=./config.toml' >> .env
+echo 'HOPWIRE_CONFIG_FILE=./config.toml' >> .env
 docker compose up -d engine        # first time (picks up the new mount)
 docker compose restart engine      # after later edits to config.toml
 ```
@@ -192,7 +192,7 @@ which rules drive false positives → raise that rule's threshold or lower its w
 ## 7. Exporting dispositions
 Dispositions live in Postgres. For a CSV:
 ```bash
-docker compose exec -T postgres psql -U aegis -d aegis \
+docker compose exec -T postgres psql -U hopwire -d hopwire \
   -c "\copy (select * from dispositions) to stdout with csv header" > dispositions.csv
 ```
 Or via the API: page through `GET /v1/alerts?status=closed` and read `disposition` from `GET /v1/alerts/{id}`.
@@ -203,19 +203,19 @@ Every disposition is also in the tamper-evident audit log; `GET /v1/audit/verify
 - Only HMAC-hashed identifiers are needed (section 3). The hashing key never leaves your side.
 - The engine port is published on `127.0.0.1` only; the console listens on port 3000. Put it behind your VPN/SSO proxy
   and TLS terminator; the pilot uses a single static API key (per-user SSO is not in the pilot build).
-- Secrets live only in `deploy/.env` (not committed). Rotate `AEGIS_API_KEY` by editing `.env` and `docker compose up -d`.
+- Secrets live only in `deploy/.env` (not committed). Rotate `HOPWIRE_API_KEY` by editing `.env` and `docker compose up -d`.
 - Audit log: every scored transaction, alert, disposition and case change is hash-chained; `GET /v1/audit/verify`
   recomputes the chain and reports the first broken row, if any.
 - End of pilot: `docker compose down -v` deletes all pilot data. Retain only the disposition export and results report if agreed.
 
 ## 9. Kubernetes (optional)
-A minimal Helm chart is in `deploy/helm/aegisgraph` (external Postgres, single engine replica by design):
+A minimal Helm chart is in `deploy/helm/hopwire` (external Postgres, single engine replica by design):
 ```bash
-kubectl create secret generic aegis-secrets \
+kubectl create secret generic hopwire-secrets \
   --from-literal=api-key=... --from-literal=database-url=postgres://...
-helm install aegis deploy/helm/aegisgraph --set existingSecret=aegis-secrets \
-  --set engine.image.repository=<registry>/aegisgraph/engine \
-  --set console.image.repository=<registry>/aegisgraph/console
+helm install hopwire deploy/helm/hopwire --set existingSecret=hopwire-secrets \
+  --set engine.image.repository=<registry>/hopwire/engine \
+  --set console.image.repository=<registry>/hopwire/console
 ```
 
 ## 10. Success criteria for the 14-day PoC
@@ -226,7 +226,7 @@ Agree the numbers at kickoff; suggested starting points are in brackets.
 | Recall on known-bad cases | Share of your confirmed mule accounts / APP-fraud payments in the replay period that have at least one alert on or before the payment | [≥ 70 %, and higher than your current system on the same cases] |
 | Alert volume | Alerts per day (score ≥ `review`) at the final config, vs. analyst capacity | [within existing team capacity] |
 | False-positive rate | Share of a reviewed sample of alerts dispositioned `false_positive` | [lower than current rules engine] |
-| Latency | p99 of `aegis_score_latency_us` from `GET /metrics` during replay, plus end-to-end `POST /v1/score` round-trip from your network | [fits inside your pre-clearance budget] |
+| Latency | p99 of `hopwire_score_latency_us` from `GET /metrics` during replay, plus end-to-end `POST /v1/score` round-trip from your network | [fits inside your pre-clearance budget] |
 | Explainability | Analysts can state why each sampled alert fired from the console alone | [yes for every sampled alert] |
 | Operability | Engine restart rebuilds state; `GET /v1/audit/verify` returns `ok: true` at end of pilot | [both pass] |
 

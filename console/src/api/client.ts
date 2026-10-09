@@ -6,7 +6,7 @@ import type {
 
 const BASE = (import.meta.env.VITE_API_URL ?? '/').replace(/\/$/, '')
 const MOCK = import.meta.env.VITE_MOCK === '1'
-const KEY = 'aegis.apiKey'
+const KEY = 'hopwire.apiKey'
 
 export class ApiError extends Error {
   status: number

@@ -6,7 +6,7 @@ import { Pill, ScoreBar } from '../components'
 import GraphView from '../GraphView'
 import { errMsg, fmtTime, money, RULE_LABEL, useLoad } from '../util'
 
-const ANALYST_KEY = 'aegis.analyst'
+const ANALYST_KEY = 'hopwire.analyst'
 
 export default function AlertDetail() {
   const { id = '' } = useParams()

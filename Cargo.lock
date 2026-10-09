@@ -9,88 +9,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
-name = "aegis-bench"
-version = "0.1.0"
-dependencies = [
- "aegis-core",
- "clap",
- "csv",
- "hdrhistogram",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "sysinfo",
- "toml",
-]
-
-[[package]]
-name = "aegis-core"
-version = "0.1.0"
-dependencies = [
- "hashbrown 0.17.1",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "toml",
- "tract-onnx",
-]
-
-[[package]]
-name = "aegis-ee"
-version = "0.1.0"
-dependencies = [
- "aegis-core",
- "chrono",
- "quick-xml",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "uuid",
-]
-
-[[package]]
-name = "aegis-iso20022"
-version = "0.1.0"
-dependencies = [
- "aegis-core",
- "chrono",
- "quick-xml",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "aegis-server"
-version = "0.1.0"
-dependencies = [
- "aegis-core",
- "aegis-ee",
- "aegis-iso20022",
- "anyhow",
- "axum",
- "chrono",
- "futures-util",
- "hex",
- "http-body-util",
- "metrics",
- "metrics-exporter-prometheus",
- "postgresql_embedded",
- "rskafka",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "sqlx",
- "tokio",
- "tower",
- "tower-http 0.7.1",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1135,6 +1053,88 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
 dependencies = [
  "digest 0.11.3",
+]
+
+[[package]]
+name = "hopwire-bench"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "csv",
+ "hdrhistogram",
+ "hopwire-core",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "toml",
+]
+
+[[package]]
+name = "hopwire-core"
+version = "0.1.0"
+dependencies = [
+ "hashbrown 0.17.1",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml",
+ "tract-onnx",
+]
+
+[[package]]
+name = "hopwire-ee"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hopwire-core",
+ "quick-xml",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "uuid",
+]
+
+[[package]]
+name = "hopwire-iso20022"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hopwire-core",
+ "quick-xml",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "hopwire-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "chrono",
+ "futures-util",
+ "hex",
+ "hopwire-core",
+ "hopwire-ee",
+ "hopwire-iso20022",
+ "http-body-util",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "postgresql_embedded",
+ "rskafka",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sqlx",
+ "tokio",
+ "tower",
+ "tower-http 0.7.1",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

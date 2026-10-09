@@ -1,6 +1,6 @@
-# AegisGraph architecture
+# Hopwire architecture
 
-AegisGraph scores each payment against an in-memory, time-windowed graph of recent payments and shared identifiers,
+Hopwire scores each payment against an in-memory, time-windowed graph of recent payments and shared identifiers,
 and returns a decision with the graph path that explains it. One Rust process, one Postgres, one static web console.
 
 ## Dataflow
@@ -8,10 +8,10 @@ and returns a decision with the graph path that explains it. One Rust process, o
 flowchart LR
     subgraph Partner VPC
         SRC[Payment platform<br/>pre-clearance hook] -->|POST /v1/score| API
-        REPLAY[aegis-bench replay<br/>historical export] -->|POST /v1/transactions| API
-        subgraph engine[aegis-server]
+        REPLAY[hopwire-bench replay<br/>historical export] -->|POST /v1/transactions| API
+        subgraph engine[hopwire-server]
             API[axum HTTP API<br/>bearer key] -->|mpsc| ACTOR[Engine actor<br/>single writer]
-            ACTOR --> CORE[aegis-core<br/>graph + detectors + scoring]
+            ACTOR --> CORE[hopwire-core<br/>graph + detectors + scoring]
             ACTOR --> PERSIST[Persistence + audit]
         end
         PERSIST --> PG[(Postgres<br/>transactions, alerts,<br/>cases, dispositions,<br/>audit_log)]
@@ -23,10 +23,10 @@ flowchart LR
 ```
 
 ## Crates
-- `aegis-core`: zero IO. Graph, detectors, scoring, config. The server and the benchmark call the exact same code path,
+- `hopwire-core`: zero IO. Graph, detectors, scoring, config. The server and the benchmark call the exact same code path,
   so benchmark numbers describe production behaviour.
-- `aegis-server`: HTTP API, Postgres persistence, audit log. Contract: [`docs/api.md`](api.md).
-- `aegis-bench`: dataset benchmark (recall/latency report) and the partner replay tool (`replay --target`).
+- `hopwire-server`: HTTP API, Postgres persistence, audit log. Contract: [`docs/api.md`](api.md).
+- `hopwire-bench`: dataset benchmark (recall/latency report) and the partner replay tool (`replay --target`).
 - `console/`: Vite + React + Cytoscape.js investigator UI, served by nginx, which also proxies `/v1` to the engine.
 
 ## Engine internals
@@ -66,7 +66,7 @@ genesis `prev_hash` = 64 zeros. Rows are never updated or deleted. `GET /v1/audi
 reports the first broken row, giving examiners tamper evidence for every score, alert and analyst decision.
 
 ## Extension seams (not built in the pilot)
-- **ML scoring.** `aegis_core::MlScorer` trait (no-op by default; `Rule::Ml` reserved). A future implementation loads an
+- **ML scoring.** `hopwire_core::MlScorer` trait (no-op by default; `Rule::Ml` reserved). A future implementation loads an
   ONNX temporal graph network (TGN) and contributes one more weighted finding to the same noisy-OR, trained on the
   disposition labels analysts produce.
 - **Streaming ingest.** A Kafka/Redpanda consumer behind a cargo feature flag, feeding the same actor as the HTTP API.
@@ -74,5 +74,5 @@ reports the first broken row, giving examiners tamper evidence for every score, 
   outside the BSL core.
 
 ## Deployment
-`deploy/docker-compose.yml` (postgres + engine + console) for pilots; `deploy/helm/aegisgraph` for Kubernetes with an
+`deploy/docker-compose.yml` (postgres + engine + console) for pilots; `deploy/helm/hopwire` for Kubernetes with an
 external Postgres. The engine image is distroless and runs as non-root. See [`docs/pilot.md`](pilot.md).

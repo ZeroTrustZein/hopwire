@@ -1,4 +1,4 @@
-# AegisGraph
+# Hopwire
 
 Real-time, in-memory graph anti-money laundering (AML) and transaction monitoring engine in Rust.
 
@@ -52,10 +52,10 @@ Evaluated on an Intel Core i9-12900K (single thread, release build):
 - **Tamper-Evident Audit Ledger**: Every transaction, verdict, case note, and disposition is cryptographically hash-chained via SHA-256 (`GET /v1/audit/verify`).
 - **Investigator Console**: React 19 + Cytoscape visualization with interactive chronological fund flow playback, SAR narrative drafting, and model telemetry.
 
-## Using as a Rust Library (`aegis-core`)
+## Using as a Rust Library (`hopwire-core`)
 
 ```rust
-use aegis_core::{Config, Engine, Scheme, Txn, Decision};
+use hopwire_core::{Config, Engine, Scheme, Txn, Decision};
 
 fn main() {
     let mut engine = Engine::new(Config::default());
@@ -100,7 +100,7 @@ docker compose up -d --build
 cargo test --workspace
 
 # Run local development server
-DATABASE_URL=postgres://user:pass@localhost:5432/aegis AEGIS_API_KEY=devkey cargo run --release -p aegis-server
+DATABASE_URL=postgres://user:pass@localhost:5432/hopwire HOPWIRE_API_KEY=devkey cargo run --release -p hopwire-server
 
 # Run the console
 cd console && npm ci && npm run dev
@@ -124,10 +124,10 @@ curl -X POST http://localhost:8080/v1/score \
 
 ## Workspace Crates
 
-- [`crates/aegis-core`](crates/aegis-core): In-memory sliding-window graph, detectors, scoring arbiter, and ONNX runtime. Zero I/O.
-- [`crates/aegis-iso20022`](crates/aegis-iso20022): ISO 20022 `pacs.008` XML credit transfer parser and `pacs.002` rejection generator.
-- [`crates/aegis-server`](crates/aegis-server): Axum HTTP API, Postgres state, Redpanda/Kafka consumer, and SHA-256 audit log actor.
-- [`crates/aegis-bench`](crates/aegis-bench): Benchmark harness (IBM AML, synthetic generator) and replay tool.
+- [`crates/hopwire-core`](crates/hopwire-core): In-memory sliding-window graph, detectors, scoring arbiter, and ONNX runtime. Zero I/O.
+- [`crates/hopwire-iso20022`](crates/hopwire-iso20022): ISO 20022 `pacs.008` XML credit transfer parser and `pacs.002` rejection generator.
+- [`crates/hopwire-server`](crates/hopwire-server): Axum HTTP API, Postgres state, Redpanda/Kafka consumer, and SHA-256 audit log actor.
+- [`crates/hopwire-bench`](crates/hopwire-bench): Benchmark harness (IBM AML, synthetic generator) and replay tool.
 - [`console`](console): React 19 + TypeScript + Cytoscape investigator UI.
 
 ## License

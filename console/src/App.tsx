@@ -27,7 +27,7 @@ function Header({ onLogout }: { onLogout: () => void }) {
   return (
     <header className="app-header">
       <div className="header-left">
-        <div className="logo"><span className="logo-icon" />AegisGraph</div>
+        <div className="logo"><span className="logo-icon" />Hopwire</div>
         <nav className="nav-links">
           <NavLink to="/alerts">Alerts</NavLink>
           <NavLink to="/cases">Cases</NavLink>

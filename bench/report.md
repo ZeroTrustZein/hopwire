@@ -1,4 +1,4 @@
-# AegisGraph benchmark report
+# Hopwire benchmark report
 
 | | |
 |---|---|
@@ -6,7 +6,7 @@
 | Dataset | synthetic (accounts=50000, days=65, seed=42, rings_per_type=50) |
 | Transactions | 2581639 scored over 29.7 days |
 | Warm-up | 2997409 earlier txns (35 days) ingested as history, not scored |
-| Engine | aegis-core 0.1.0 (in-process, single thread) |
+| Engine | hopwire-core 0.1.0 (in-process, single thread) |
 | CPU | 12th Gen Intel(R) Core(TM) i9-12900K (24 logical cores) |
 | RAM | 31.8 GiB |
 | OS | Windows 11 Pro |

@@ -5,7 +5,7 @@ import type { CaseStatus } from '../api/types'
 import { AlertTable, Pill } from '../components'
 import { errMsg, fmtTime, useLoad } from '../util'
 
-const ANALYST_KEY = 'aegis.analyst'
+const ANALYST_KEY = 'hopwire.analyst'
 
 export default function CaseDetail() {
   const { id = '' } = useParams()

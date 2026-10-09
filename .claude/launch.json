@@ -2,13 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "aegis-server",
+      "name": "hopwire-server",
       "runtimeExecutable": "cargo",
-      "runtimeArgs": ["run", "--release", "-p", "aegis-server"],
+      "runtimeArgs": ["run", "--release", "-p", "hopwire-server"],
       "env": {
-        "DATABASE_URL": "postgres://aegis@localhost:54329/aegis",
-        "AEGIS_API_KEY": "devkey",
-        "AEGIS_BIND": "127.0.0.1:18080"
+        "DATABASE_URL": "postgres://hopwire@localhost:54329/hopwire",
+        "HOPWIRE_API_KEY": "devkey",
+        "HOPWIRE_BIND": "127.0.0.1:18080"
       },
       "port": 18080
     },
@@ -17,7 +17,7 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--port", "5174", "--strictPort"],
       "cwd": "console",
-      "env": { "AEGIS_PROXY_TARGET": "http://127.0.0.1:18080" },
+      "env": { "HOPWIRE_PROXY_TARGET": "http://127.0.0.1:18080" },
       "port": 5174
     }
   ]

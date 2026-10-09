@@ -1,12 +1,12 @@
-# AegisGraph REST API v1 (pilot contract)
+# Hopwire REST API v1 (pilot contract)
 
-FROZEN contract between `aegis-server`, `console/`, and `aegis-bench --target`.
+FROZEN contract between `hopwire-server`, `console/`, and `hopwire-bench --target`.
 JSON shapes of `Txn`, `Verdict`, `Finding`, `PathEdge`, `Subgraph`, `EngineStats`, `Rule`,
-`Decision`, `NodeKind`, `EdgeKind` are exactly the serde output of `crates/aegis-core/src/types.rs`
+`Decision`, `NodeKind`, `EdgeKind` are exactly the serde output of `crates/hopwire-core/src/types.rs`
 (enums are lowercase / snake_case strings).
 
 ## Conventions
-- Auth: `Authorization: Bearer <AEGIS_API_KEY>` on every `/v1/*` route. Missing/wrong → `401`.
+- Auth: `Authorization: Bearer <HOPWIRE_API_KEY>` on every `/v1/*` route. Missing/wrong → `401`.
   `/healthz` and `/metrics` are open.
 - Errors: non-2xx with body `{"error": "<message>"}`.
 - IDs: UUID v4 strings. Times: `created_at`/`updated_at` RFC 3339 UTC strings; txn times stay `ts_ms` (epoch ms).
@@ -16,10 +16,10 @@ JSON shapes of `Txn`, `Verdict`, `Finding`, `PathEdge`, `Subgraph`, `EngineStats
 | Var | Default | Meaning |
 |---|---|---|
 | `DATABASE_URL` | required | Postgres URL |
-| `AEGIS_API_KEY` | required | Static bearer key (pilot; OIDC is EE) |
-| `AEGIS_CONFIG` | none | Path to engine `config.toml`; defaults used if unset |
-| `AEGIS_BIND` | `0.0.0.0:8080` | Listen address |
-| `AEGIS_CORS_ORIGIN` | none | Allowed origin for console dev server (e.g. `http://localhost:5173`) |
+| `HOPWIRE_API_KEY` | required | Static bearer key (pilot; OIDC is EE) |
+| `HOPWIRE_CONFIG` | none | Path to engine `config.toml`; defaults used if unset |
+| `HOPWIRE_BIND` | `0.0.0.0:8080` | Listen address |
+| `HOPWIRE_CORS_ORIGIN` | none | Allowed origin for console dev server (e.g. `http://localhost:5173`) |
 
 ## Scoring
 ### `POST /v1/score`
@@ -63,7 +63,7 @@ Body: `Txn[]` (max 10 000). Processed in array order through the same engine pat
 - `GET /v1/stats` → `EngineStats`.
 - `GET /v1/audit/verify` → `{"ok": bool, "entries": <int>, "broken_at": <int|null>}`. Recomputes the hash chain.
 - `GET /healthz` → `200 ok`.
-- `GET /metrics` → Prometheus text (`aegis_txns_total`, `aegis_alerts_total{decision}`, `aegis_score_latency_us` histogram).
+- `GET /metrics` → Prometheus text (`hopwire_txns_total`, `hopwire_alerts_total{decision}`, `hopwire_score_latency_us` histogram).
 
 ## Audit log
 Every state change (txn scored, alert created, disposition, case create/update, note) appends one row:

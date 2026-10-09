@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
-# AegisGraph investigator console. Build from the repo root:
-#   docker build -f deploy/console.Dockerfile -t aegisgraph/console .
+# Hopwire investigator console. Build from the repo root:
+#   docker build -f deploy/console.Dockerfile -t hopwire/console .
 
 FROM node:24-alpine AS build
 WORKDIR /app
@@ -15,7 +15,7 @@ RUN npm run build
 FROM nginx:alpine
 # nginx's entrypoint renders /etc/nginx/templates/*.template with envsubst
 # (only variables defined in the environment, so nginx's own $uri etc. survive).
-ENV AEGIS_ENGINE_URL=http://engine:8080
+ENV HOPWIRE_ENGINE_URL=http://engine:8080
 COPY deploy/nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80

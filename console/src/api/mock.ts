@@ -199,7 +199,7 @@ export async function mockRequest(method: string, fullPath: string, body: unknow
         alert_id: id,
         narrative: {
           title: `SUSPICIOUS ACTIVITY REPORT: ${a.rules.join(', ').toUpperCase()} on ${a.creditor}`,
-          executive_summary: `AegisGraph identified anomalous multi-hop transaction activity on account ${a.creditor} with risk score ${a.score.toFixed(2)}.`,
+          executive_summary: `Hopwire identified anomalous multi-hop transaction activity on account ${a.creditor} with risk score ${a.score.toFixed(2)}.`,
           suspect_breakdown: `- Debtor: ${a.debtor}\n- Creditor: ${a.creditor}\n- Amount: £${(a.amount_minor / 100).toFixed(2)}`,
           chronological_flow: `| Leg | From | To | Amount |\n|---|---|---|---|\n| 1 | ${a.debtor} | ${a.creditor} | £${(a.amount_minor/100).toFixed(2)} |`,
           topological_analysis: a.findings.map(f => `- ${f.rule}: ${f.reason}`).join('\n'),
@@ -208,7 +208,7 @@ export async function mockRequest(method: string, fullPath: string, body: unknow
           full_markdown: `# SUSPICIOUS ACTIVITY REPORT\n\n## Summary\nAlert on ${a.creditor}\n\n## Findings\n${a.findings.map(f => f.reason).join('\n')}`,
         },
         fincen_xml: '<?xml version="1.0" encoding="UTF-8"?><EFilingBatchXML xmlns="www.fincen.gov/bsar"><Activity><ActivitySeqNum>' + id + '</ActivitySeqNum></Activity></EFilingBatchXML>',
-        goaml_xml: '<?xml version="1.0" encoding="UTF-8"?><report xmlns="http://www.unodc.org/goAML"><rentity_id>AEGIS</rentity_id></report>',
+        goaml_xml: '<?xml version="1.0" encoding="UTF-8"?><report xmlns="http://www.unodc.org/goAML"><rentity_id>HOPWIRE</rentity_id></report>',
       }
     }
     case 'GET /model/drift': {

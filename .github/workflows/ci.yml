@@ -24,12 +24,12 @@ jobs:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_USER: aegis
-          POSTGRES_PASSWORD: aegis
-          POSTGRES_DB: aegis_test
+          POSTGRES_USER: hopwire
+          POSTGRES_PASSWORD: hopwire
+          POSTGRES_DB: hopwire_test
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U aegis -d aegis_test"
+          --health-cmd "pg_isready -U hopwire -d hopwire_test"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
@@ -44,8 +44,8 @@ jobs:
       - run: cargo test --workspace --locked
         env:
           # Server integration tests may use either variable (or skip when unset).
-          DATABASE_URL: postgres://aegis:aegis@localhost:5432/aegis_test
-          AEGIS_TEST_DATABASE_URL: postgres://aegis:aegis@localhost:5432/aegis_test
+          DATABASE_URL: postgres://hopwire:hopwire@localhost:5432/hopwire_test
+          HOPWIRE_TEST_DATABASE_URL: postgres://hopwire:hopwire@localhost:5432/hopwire_test
 
   console:
     runs-on: ubuntu-latest
@@ -76,6 +76,6 @@ jobs:
           context: .
           file: deploy/${{ matrix.image }}.Dockerfile
           push: false
-          tags: aegisgraph/${{ matrix.image }}:ci
+          tags: hopwire/${{ matrix.image }}:ci
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}

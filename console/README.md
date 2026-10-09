@@ -1,6 +1,6 @@
-# AegisGraph console
+# Hopwire console
 
-Investigator UI for the AegisGraph engine: alert queue, alert detail with the explanation subgraph,
+Investigator UI for the Hopwire engine: alert queue, alert detail with the explanation subgraph,
 dispositions, and cases. Vite + React 19 + TypeScript (strict) + Cytoscape.js + react-router.
 Codes against the frozen contract in [`../docs/api.md`](../docs/api.md); types live in `src/api/types.ts`.
 
@@ -11,7 +11,7 @@ npm install
 npm run dev            # http://localhost:5173, proxies /v1 -> http://localhost:8080
 ```
 
-Sign in with the server's `AEGIS_API_KEY`. The key is validated with `GET /v1/stats` and kept in
+Sign in with the server's `HOPWIRE_API_KEY`. The key is validated with `GET /v1/stats` and kept in
 `sessionStorage` (cleared when the tab closes). Any `401` sends you back to the login screen.
 
 ## Mock mode (no backend)
@@ -38,5 +38,5 @@ either proxy `/v1` to the engine or set `VITE_API_URL` at build time.
 
 | Var | Default | Meaning |
 |---|---|---|
-| `VITE_API_URL` | `/` (same origin) | Engine base URL. If cross-origin, set `AEGIS_CORS_ORIGIN` on the server. |
+| `VITE_API_URL` | `/` (same origin) | Engine base URL. If cross-origin, set `HOPWIRE_CORS_ORIGIN` on the server. |
 | `VITE_MOCK` | unset | `1` = use built-in fixtures instead of the API. |

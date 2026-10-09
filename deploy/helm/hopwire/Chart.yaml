@@ -1,0 +1,13 @@
+apiVersion: v2
+name: hopwire
+description: Real-time graph AML and transaction monitoring engine
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - aml
+  - fraud
+  - fintech
+  - graph
+maintainers:
+  - name: Hopwire Team

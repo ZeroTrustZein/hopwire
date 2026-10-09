@@ -1,18 +1,18 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/aegis-core",
-    "crates/aegis-server",
-    "crates/aegis-bench",
-    "crates/aegis-iso20022",
-    "crates/aegis-ee",
+    "crates/hopwire-core",
+    "crates/hopwire-server",
+    "crates/hopwire-bench",
+    "crates/hopwire-iso20022",
+    "crates/hopwire-ee",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/ZeroTrustZein/aegisgraph"
+repository = "https://github.com/ZeroTrustZein/hopwire"
 readme = "README.md"
 publish = false
 
