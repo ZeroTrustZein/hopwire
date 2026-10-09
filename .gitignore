@@ -17,6 +17,7 @@ dist/
 .vite/
 
 # IDE / OS
+.claude/
 .DS_Store
 Thumbs.db
 .idea/
