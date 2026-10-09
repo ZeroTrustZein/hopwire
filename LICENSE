@@ -1,19 +1,6 @@
-Business Source License 1.1
+AegisGraph is dual-licensed under either:
 
-Parameters:
+* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+* MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
-Licensor:                   AegisGraph Authors
-Licensed Work:              AegisGraph Core (crates/aegis-core, crates/aegis-server, crates/aegis-bench)
-Additional Use Grant:       You may use the Licensed Work for development, testing,
-                            and non-production environments. You may also use the
-                            Licensed Work in production provided that your use does
-                            not offer a commercial managed service or hosted platform
-                            whose primary functionality is graph-based anti-money
-                            laundering or transaction monitoring to third parties.
-Change Date:                2029-10-01
-Change License:             Apache License, Version 2.0
-
-Notice:
-The Business Source License 1.1 (the "License") can be found at
-https://mariadb.com/bsl11. The terms of that license are incorporated herein
-by reference.
+at your option.

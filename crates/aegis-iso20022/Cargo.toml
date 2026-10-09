@@ -2,7 +2,7 @@
 name = "aegis-iso20022"
 version.workspace = true
 edition.workspace = true
-license-file.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [dependencies]

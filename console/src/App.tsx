@@ -31,7 +31,7 @@ function Header({ onLogout }: { onLogout: () => void }) {
         <nav className="nav-links">
           <NavLink to="/alerts">Alerts</NavLink>
           <NavLink to="/cases">Cases</NavLink>
-          <NavLink to="/governance">Model Governance (SR 11-7)</NavLink>
+          <NavLink to="/governance">Model Drift</NavLink>
         </nav>
       </div>
       <div className="header-right">

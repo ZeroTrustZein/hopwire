@@ -10,10 +10,10 @@ export default function Governance() {
     <div className="page">
       <div className="page-header">
         <div>
-          <div className="crumbs">Model Governance</div>
-          <h1 className="page-title">Federal Reserve SR 11-7 Model Risk & Drift Telemetry</h1>
+          <div className="crumbs">Telemetry</div>
+          <h1 className="page-title">Population Stability Index (PSI) & Score Distribution</h1>
           <p className="page-subtitle">
-            Continuous validation tracking score distribution stability and characteristic drift across rolling windows.
+            Tracks distribution shifts between calibrated baseline and active score evaluations.
           </p>
         </div>
         <div>
@@ -38,11 +38,11 @@ export default function Governance() {
             </div>
 
             <div className="card stat-card">
-              <span className="stat-label">SR 11-7 Regulatory Guidance</span>
+              <span className="stat-label">Stability Threshold</span>
               <span className="stat-desc">
-                {rep.status === 'green' && 'PSI < 0.10: Model exhibits high stability. No retraining required.'}
-                {rep.status === 'yellow' && '0.10 ≤ PSI < 0.25: Moderate population drift. Enhanced monitoring recommended.'}
-                {rep.status === 'red' && 'PSI ≥ 0.25: Significant model drift detected. Retraining & supervisory validation required.'}
+                {rep.status === 'green' && 'PSI < 0.10: Distribution stable. Baseline matches current scoring.'}
+                {rep.status === 'yellow' && '0.10 ≤ PSI < 0.25: Moderate shift. Slight population or transaction variance.'}
+                {rep.status === 'red' && 'PSI ≥ 0.25: Significant divergence between baseline and evaluated stream.'}
               </span>
             </div>
 
@@ -91,25 +91,15 @@ export default function Governance() {
 
           <div className="card" style={{ marginTop: '20px' }}>
             <div className="card-header">
-              <span>SR 11-7 Model Risk Governance Checklist</span>
+              <span>Statistical Reference & Methodology</span>
             </div>
-            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓</span>
-                <span><strong>Conceptual Soundness:</strong> Dual-path architecture combining bounded deterministic graph BFS with continuous-time TGN.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓</span>
-                <span><strong>Ongoing Monitoring:</strong> Real-time latency percentile instrumentation (p50/p90/p99) and daily PSI drift evaluation.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓</span>
-                <span><strong>Outcomes Analysis:</strong> Benchmarked against Altman et al. IBM AML dataset (130x lift over base rate).</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓</span>
-                <span><strong>Audit Trail & Lineage:</strong> Every transaction and decision cryptographically hash-chained via SHA-256 tamper-evident log.</span>
-              </div>
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+              <p style={{ margin: 0 }}>
+                <strong>Formula:</strong> <code>PSI = Σ (Actual% - Expected%) × ln(Actual% / Expected%)</code> across 10 calibrated score deciles.
+              </p>
+              <p style={{ margin: 0 }}>
+                Deciles partition the [0.0, 1.0] confidence output range. A high PSI signals that recent transaction patterns differ fundamentally from the reference distribution, indicating shifting fraud tactics or seasonal volume shifts.
+              </p>
             </div>
           </div>
         </>

@@ -70,7 +70,7 @@ export default function AlertDetail() {
         </div>
         <div className="filter-group">
           <button className="sm" onClick={loadSar} disabled={sarLoading}>
-            {sarLoading ? 'Generating SAR…' : '⚖ Generate SAR Narrative'}
+            {sarLoading ? 'Generating…' : 'Draft SAR Narrative'}
           </button>
           {a.case_id
             ? <Link className="btn-link" to={`/cases/${a.case_id}`}>Open case →</Link>
@@ -179,7 +179,7 @@ function SarModal({ sar, onClose }: { sar: SarExportResponse; onClose: () => voi
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card sar-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Suspicious Activity Report Studio</h3>
+          <h3>Suspicious Activity Report Draft</h3>
           <button className="sm" onClick={onClose}>✕</button>
         </div>
         <div className="sar-tabs">

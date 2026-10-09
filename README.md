@@ -1,72 +1,140 @@
 # AegisGraph
 
-Real-time graph AML engine for instant payments. Self-hosted in your VPC; no PII leaves it.
+Real-time, in-memory graph anti-money laundering (AML) and transaction monitoring engine in Rust.
 
-Every payment is scored against a live, time-windowed graph of recent payments and shared identifiers
-(devices, IPs, customers) **before it clears**. Every alert carries the exact payment path that triggered it,
-so analysts and examiners see *why*, not just a number.
+Scores financial payments against a live, time-windowed graph of recent payments and shared identifiers (devices, IPs, customer hashes) **before settlement clearance**. Every alert outputs the exact payment path that triggered it, providing verifiable explanations rather than black-box opacity.
 
-| | |
-|---|---|
-| Engine latency | **p99 9–40 µs** per payment, single thread, in-process |
-| Throughput | **150k–400k payments/s** per core; **25k/s end to end** with Postgres persistence |
-| Scale tested | 1M accounts, 77M payments, 5.7 GB RAM |
-| Detection (independent IBM AML data) | ~1 in 5 alerts is laundering, **~130x** the base rate, at a 0.07% alert rate |
+```
+   Payment (JSON / ISO 20022 pacs.008)
+                  │
+                  ▼
+   ┌──────────────────────────────┐
+   │ In-Memory Sliding Graph(RAM) │
+   │ - 72h Payment Edges (Deq)    │
+   │ - Counterparty LRU Cache     │
+   └──────────────────────────────┘
+      │                        │
+      ▼                        ▼
+┌───────────────────┐    ┌───────────────────┐
+│ Deterministic BFS │    │  Continuous-Time  │
+│ - Bounded Cycles  │    │  Neural Path      │
+│ - Supernode Caps  │    │ - GRU Node Memory │
+│ - Mule Fan-In     │    │ - Harmonic Time   │
+│ - Pass-Through    │    │ - Embedded ONNX   │
+└───────────────────┘    └───────────────────┘
+      │                        │
+      └───────────┬────────────┘
+                  ▼
+      Ensemble Scoring & Path Verdict
+      Allow / Review / Block + Subgraph
+```
 
-Full methodology, holdout runs and the honest caveats: [`bench/README.md`](bench/README.md).
+## Benchmarks & Performance
 
-## What it detects
-| Rule | Pattern | Why it matters (UK APP fraud / PSR reimbursement) |
-|---|---|---|
-| `cycle` | Money returning to its origin via 2–4 hops | Layering / round-tripping |
-| `mule_fan_in` | Many *new* senders → one (often young) account | Receiving mule collecting from victims |
-| `pass_through` | Funds from strangers forwarded on within minutes | The core mule behaviour |
-| `fan_out` | One account → many *new* payees | Scattering proceeds / account takeover |
-| `velocity` | Bursts of payments to new payees | Draining a compromised account |
-| `shared_identifier` | One device/IP/person behind many accounts | Mule herders |
+Evaluated on an Intel Core i9-12900K (single thread, release build):
 
-**Counterparty memory** keeps each account's known payees and payers beyond the edge window, so payroll,
-rent and salary spend don't alert. **Hub tagging** and **bounded search** keep latency flat when a
-merchant or payroll provider touches everything.
+| Benchmark | Transactions | p99 Latency | Throughput | Precision | Attempt Recall | Report |
+|---|---|---|---|---|---|---|
+| Synthetic Primary (35d warm-up) | 2.6M | **9.2 µs** | 376k/s | **88.5%** | 99% | [report.md](bench/report.md) |
+| Synthetic Holdout (unseen seed) | 7.1M | **13.8 µs** | 288k/s | **65.5%** | 99% | [report-holdout.md](bench/report-holdout.md) |
+| IBM AML HI-Small (Altman et al.) | 1.3M | **103.6 µs** | 22k/s | 1.5% | **96.3%** | [report-ibm.md](bench/report-ibm.md) |
+| Full Enterprise Scale | 77M (1M accts) | **14.2 µs** | 224k/s | 55.4% | peak RAM **5.7 GB** | [scale report](bench/README.md) |
 
-## Quickstart
-Full stack (needs Docker):
+*Full methodology, dataset links, and reproduction scripts: [`bench/README.md`](bench/README.md).*
+
+## Features
+
+- **Sub-Millisecond Bounded Traversal**: Evaluates 2–4 hop cyclic layering and pass-through conduits in RAM without recursive relational joins.
+- **Supernode Degree Ceilings**: Nodes exceeding degree thresholds (hubs like payroll providers or merchants) are capped during traversal, eliminating latency spikes.
+- **Counterparty Memory**: Per-account LRU cache distinguishes recurring counterparties (salaries, standing orders) from new dispersal rings, cutting payroll false positives by >80%.
+- **Embedded Neural Inference**: Optional continuous-time dynamic graph (TGN) inference executed directly inside Rust via `tract-onnx` with zero Python sidecar overhead.
+- **Native ISO 20022**: Zero-copy parser for `pacs.008.001.10` credit transfers and generator for `pacs.002` payment status rejections.
+- **Tamper-Evident Audit Ledger**: Every transaction, verdict, case note, and disposition is cryptographically hash-chained via SHA-256 (`GET /v1/audit/verify`).
+- **Investigator Console**: React 19 + Cytoscape visualization with interactive chronological fund flow playback, SAR narrative drafting, and model telemetry.
+
+## Using as a Rust Library (`aegis-core`)
+
+```rust
+use aegis_core::{Config, Engine, Scheme, Txn, Decision};
+
+fn main() {
+    let mut engine = Engine::new(Config::default());
+
+    let txn = Txn {
+        tx_id: "tx-001".into(),
+        ts_ms: 1_700_000_000_000,
+        amount_minor: 250_000, // £2,500.00
+        currency: "GBP".into(),
+        debtor: "acc-alice".into(),
+        creditor: "acc-bob".into(),
+        scheme: Scheme::Fps,
+        device_id: Some("dev-alice".into()),
+        ip: Some("192.168.1.10".into()),
+        debtor_customer_hash: None,
+        creditor_customer_hash: None,
+        creditor_account_opened_at_ms: None,
+    };
+
+    let verdict = engine.process(&txn);
+    println!("Score: {:.2}, Decision: {:?}", verdict.score, verdict.decision);
+    for finding in &verdict.findings {
+        println!(" - [{:?}] {}", finding.rule, finding.reason);
+    }
+}
+```
+
+## Running the Standalone Platform
+
+### Docker Compose
 ```bash
 cd deploy
-cp .env.example .env        # set AEGIS_API_KEY and POSTGRES_PASSWORD
+cp .env.example .env        # set your secure API key & DB password
 docker compose up -d --build
 ```
-Console: http://localhost:3000 (log in with `AEGIS_API_KEY`). Engine API: http://127.0.0.1:8080.
+- **Investigator Console**: http://localhost:3000
+- **Engine API**: http://localhost:8080
 
-Score a payment:
+### Direct Cargo & Dev Run
 ```bash
-curl -s -X POST http://127.0.0.1:8080/v1/score -H "Authorization: Bearer $AEGIS_API_KEY" \
-  -H 'Content-Type: application/json' \
-  -d '{"tx_id":"t1","ts_ms":1700000000000,"amount_minor":100000,"currency":"GBP","debtor":"alice","creditor":"bob","scheme":"fps"}'
-```
+# Run unit and integration test suite (starts embedded Postgres automatically)
+cargo test --workspace
 
-Without Docker, try the console against demo data: `cd console && npm ci && VITE_MOCK=1 npx vite`.
+# Run local development server
+DATABASE_URL=postgres://user:pass@localhost:5432/aegis AEGIS_API_KEY=devkey cargo run --release -p aegis-server
 
-## Architecture
-- `crates/aegis-core`: in-memory graph, detectors, noisy-OR scoring. Zero IO.
-- `crates/aegis-server`: axum HTTP API, Postgres persistence, hash-chained audit log, restart rebuild ([API](docs/api.md)).
-- `crates/aegis-bench`: benchmarks (synthetic, IBM AML) and the partner replay tool.
-- `console/`: React + Cytoscape investigator UI: alert queue, path-highlighted subgraph, cases, dispositions.
-- `deploy/`: Dockerfiles, Compose stack, Helm chart.
-- `ee/`: enterprise modules (SSO, SAR generation, HA). Reserved.
-
-Details: [`docs/architecture.md`](docs/architecture.md). Design-partner runbook: [`docs/pilot.md`](docs/pilot.md).
-
-## Development
-```bash
-cargo test --workspace      # server tests start a throwaway Postgres automatically
+# Run the console
 cd console && npm ci && npm run dev
 ```
 
-## Status
-Pilot-ready core. The ML path (temporal graph network via ONNX) has an extension point (`MlScorer`) but no
-model yet. On independent data, deterministic rules catch about 40% of laundering attempts; closing that gap is the
-next milestone.
+### Quick Score Check
+```bash
+curl -X POST http://localhost:8080/v1/score \
+  -H "Authorization: Bearer devkey" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tx_id": "tx-sample-1",
+    "ts_ms": 1700000000000,
+    "amount_minor": 500000,
+    "currency": "GBP",
+    "debtor": "alice",
+    "creditor": "bob",
+    "scheme": "fps"
+  }'
+```
+
+## Workspace Crates
+
+- [`crates/aegis-core`](crates/aegis-core): In-memory sliding-window graph, detectors, scoring arbiter, and ONNX runtime. Zero I/O.
+- [`crates/aegis-iso20022`](crates/aegis-iso20022): ISO 20022 `pacs.008` XML credit transfer parser and `pacs.002` rejection generator.
+- [`crates/aegis-server`](crates/aegis-server): Axum HTTP API, Postgres state, Redpanda/Kafka consumer, and SHA-256 audit log actor.
+- [`crates/aegis-bench`](crates/aegis-bench): Benchmark harness (IBM AML, synthetic generator) and replay tool.
+- [`console`](console): React 19 + TypeScript + Cytoscape investigator UI.
 
 ## License
-BSL 1.1 (converts to Apache 2.0 on 2029-10-01). See [`LICENSE`](LICENSE).
+
+Dual-licensed under either:
+
+* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+* MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
