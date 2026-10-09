@@ -1,9 +1,9 @@
 mod common;
 
+use common::*;
 use hopwire_core::{
     Config, Decision, EdgeKind, Engine, Finding, MlScorer, NodeKind, Rule, Txn, Verdict,
 };
-use common::*;
 
 #[test]
 fn eviction_forgets_old_edges_and_reclaims() {

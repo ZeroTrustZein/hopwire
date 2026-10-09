@@ -19,7 +19,8 @@ async fn main() -> anyhow::Result<()> {
         let st_clone = state.clone();
         tokio::spawn(async move {
             if let Err(e) =
-                hopwire_server::kafka::consumer::run_consumer(st_clone, kafka_cfg, _shutdown_rx).await
+                hopwire_server::kafka::consumer::run_consumer(st_clone, kafka_cfg, _shutdown_rx)
+                    .await
             {
                 tracing::error!(error = %e, "Kafka consumer terminated with error");
             }

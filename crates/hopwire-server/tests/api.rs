@@ -9,12 +9,12 @@
 
 use std::str::FromStr;
 
-use hopwire_server::{app, AppState, ServerConfig};
 use axum::{
     body::Body,
     http::{Request, StatusCode},
     Router,
 };
+use hopwire_server::{app, AppState, ServerConfig};
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};

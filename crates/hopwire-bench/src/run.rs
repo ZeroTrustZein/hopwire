@@ -6,8 +6,8 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::time::Instant;
 
-use hopwire_core::{Config, Decision, Engine, Rule, Txn};
 use hdrhistogram::Histogram;
+use hopwire_core::{Config, Decision, Engine, Rule, Txn};
 
 use crate::{Label, Res};
 

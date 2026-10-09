@@ -2,13 +2,13 @@
 
 use std::collections::HashSet;
 
-use hopwire_core::{Decision, Txn, Verdict};
 use axum::{
     extract::State,
     http::header,
     response::{IntoResponse, Response},
     Json,
 };
+use hopwire_core::{Decision, Txn, Verdict};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::PgConnection;

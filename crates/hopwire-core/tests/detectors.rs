@@ -2,8 +2,8 @@ mod common;
 
 use std::time::Instant;
 
-use hopwire_core::{Config, EdgeKind, Engine, Rule};
 use common::*;
+use hopwire_core::{Config, EdgeKind, Engine, Rule};
 
 /// Run a ring `a0 -> a1 -> ... -> a{n-1} -> a0`, one minute apart; return the closing verdict.
 fn ring(e: &mut Engine, n: usize) -> hopwire_core::Verdict {

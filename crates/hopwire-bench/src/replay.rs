@@ -5,8 +5,8 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use hopwire_core::Txn;
 use hdrhistogram::Histogram;
+use hopwire_core::Txn;
 use serde_json::Value;
 
 use crate::{io, Res};

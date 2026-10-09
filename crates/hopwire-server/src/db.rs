@@ -1,8 +1,8 @@
 //! Postgres pool, embedded migrations, and restart rebuild.
 
-use hopwire_core::Txn;
 use anyhow::{Context, Result};
 use futures_util::TryStreamExt;
+use hopwire_core::Txn;
 use sqlx::{postgres::PgPoolOptions, types::Json, PgPool};
 
 use crate::actor::EngineHandle;

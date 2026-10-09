@@ -2,9 +2,9 @@
 
 use std::collections::HashSet;
 
-use hopwire_core::{Finding, NodeKind, PathEdge, SubNode, Subgraph, Txn};
 use axum::{extract::State, Json};
 use chrono::{DateTime, Utc};
+use hopwire_core::{Finding, NodeKind, PathEdge, SubNode, Subgraph, Txn};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::types::Json as Jsonb;
@@ -354,10 +354,7 @@ pub async fn generate_sar(
             currency: txn.currency.clone(),
             from_account: txn.debtor.clone(),
             to_account: txn.creditor.clone(),
-            description: format!(
-                "Suspicious payment flagged by Hopwire: {}",
-                narrative.title
-            ),
+            description: format!("Suspicious payment flagged by Hopwire: {}", narrative.title),
         }],
     };
     let goaml_xml = hopwire_ee::sar::uk_fiu::generate_goaml_xml(&goaml_data);
