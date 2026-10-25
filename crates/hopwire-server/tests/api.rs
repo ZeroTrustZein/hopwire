@@ -722,8 +722,22 @@ async fn postgres() -> (Option<postgresql_embedded::PostgreSQL>, String) {
     if let Ok(url) = std::env::var("HOPWIRE_TEST_DATABASE_URL") {
         return (None, url);
     }
-    let mut pg = postgresql_embedded::PostgreSQL::default();
+
+    let mut settings = postgresql_embedded::Settings::default();
+    settings.timeout = Some(std::time::Duration::from_secs(60));
+    let mut pg = postgresql_embedded::PostgreSQL::new(settings);
+
     pg.setup().await.expect("embedded postgres setup");
+
+    // WORKAROUND: Embedded Postgres archives on some platforms lack the UTC alias.
+    // sqlx > 0.8 defaults to `TimeZone=UTC` and fails if it is missing.
+    // Copy the existing UCT file to UTC.
+    let tz_dir = pg.settings().installation_dir.join("share").join("timezone");
+    let (uct, utc) = (tz_dir.join("UCT"), tz_dir.join("UTC"));
+    if uct.exists() && !utc.exists() {
+        let _ = std::fs::copy(uct, utc);
+    }
+
     pg.start().await.expect("embedded postgres start");
     let url = pg.settings().url("postgres");
     (Some(pg), url)
