@@ -723,8 +723,10 @@ async fn postgres() -> (Option<postgresql_embedded::PostgreSQL>, String) {
         return (None, url);
     }
 
-    let mut settings = postgresql_embedded::Settings::default();
-    settings.timeout = Some(std::time::Duration::from_secs(60));
+    let settings = postgresql_embedded::Settings {
+        timeout: Some(std::time::Duration::from_secs(60)),
+        ..Default::default()
+    };
     let mut pg = postgresql_embedded::PostgreSQL::new(settings);
 
     pg.setup().await.expect("embedded postgres setup");
