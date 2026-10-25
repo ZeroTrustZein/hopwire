@@ -732,7 +732,11 @@ async fn postgres() -> (Option<postgresql_embedded::PostgreSQL>, String) {
     // WORKAROUND: Embedded Postgres archives on some platforms lack the UTC alias.
     // sqlx > 0.8 defaults to `TimeZone=UTC` and fails if it is missing.
     // Copy the existing UCT file to UTC.
-    let tz_dir = pg.settings().installation_dir.join("share").join("timezone");
+    let tz_dir = pg
+        .settings()
+        .installation_dir
+        .join("share")
+        .join("timezone");
     let (uct, utc) = (tz_dir.join("UCT"), tz_dir.join("UTC"));
     if uct.exists() && !utc.exists() {
         let _ = std::fs::copy(uct, utc);
