@@ -722,13 +722,22 @@ async fn postgres() -> (Option<postgresql_embedded::PostgreSQL>, String) {
     if let Ok(url) = std::env::var("HOPWIRE_TEST_DATABASE_URL") {
         return (None, url);
     }
-    let mut pg = postgresql_embedded::PostgreSQL::default();
+    let mut settings = postgresql_embedded::Settings::default();
+    settings.timeout = Some(std::time::Duration::from_secs(60));
+    let mut pg = postgresql_embedded::PostgreSQL::new(settings);
     pg.setup().await.expect("embedded postgres setup");
+
+    let tz_dir = pg.settings().installation_dir.join("share/timezone");
+    let uct_file = tz_dir.join("UCT");
+    let utc_file = tz_dir.join("UTC");
+    if uct_file.exists() && !utc_file.exists() {
+        let _ = std::fs::copy(&uct_file, &utc_file);
+    }
+
     pg.start().await.expect("embedded postgres start");
     let url = pg.settings().url("postgres");
     (Some(pg), url)
 }
-
 async fn fresh_db(base: &PgConnectOptions, scenario: &str) -> PgPool {
     let name = format!("hopwire_test_{scenario}_{}", uuid::Uuid::new_v4().simple());
     let mut admin = base.connect().await.expect("connect admin db");
